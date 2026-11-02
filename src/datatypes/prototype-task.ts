@@ -29,6 +29,21 @@ export interface TaskGoalEntry {
     subtaskIds?: string[];
     /** 是否已手动标记完成（可选，缺省视为未完成） */
     done?: boolean;
+    /** 分配的起始周（周键，如 2026-W45，可选） */
+    startWeek?: string;
+    /** 分配的结束周（周键，如 2026-W47，可选） */
+    endWeek?: string;
+}
+
+/** 日目标条目（任务详情「一周目标」选项卡，按日期记录） */
+export interface TaskDayGoalEntry {
+    id: string;
+    /** 目标名称 */
+    text: string;
+    /** 是否已完成（可选，缺省视为未完成） */
+    done?: boolean;
+    /** 创建时间（时间戳） */
+    createdAt: number;
 }
 
 /** 原型任务 */
@@ -56,6 +71,8 @@ export interface PrototypeTask {
     habit?: TaskHabit;
     /** 目标清单条目（任务详情「目标」面板，可选） */
     goals?: TaskGoalEntry[];
+    /** 日目标（任务详情「一周目标」选项卡，键为日期 YYYY-MM-DD） */
+    dayGoals?: Record<string, TaskDayGoalEntry[]>;
     /** 是否已归档（归档任务在界面中隐藏，数据仍保留） */
     archived?: boolean;
     /** 创建时间戳 */

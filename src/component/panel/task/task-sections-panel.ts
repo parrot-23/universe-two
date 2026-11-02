@@ -4,8 +4,15 @@ import { Notice, TFolder, setIcon } from 'obsidian';
 import type { App, TFile } from 'obsidian';
 
 import type { ChecklistItem } from '../../../datatypes/domain';
-import type { PrototypeTask } from '../../../datatypes/prototype-task';
+import type { PrototypeTask, TaskDayGoalEntry } from '../../../datatypes/prototype-task';
 import { t } from '../../../i18n';
+import {
+    getCurrentDayKey,
+    getCurrentWeekKey,
+    makeDayKeyFromWeek,
+    parseWeekKey,
+    shiftWeekKey,
+} from '../../../shared/plan-data';
 import { buildTaskFileName, listTaskFiles, relativeToDir } from '../../../shared/task-file';
 import { ensureTaskFileDir, revealFolderInExplorer } from '../../../shared/task-library';
 import { FileEditorPanel } from '../basic/file-editor-panel';
@@ -13,11 +20,12 @@ import type { FloatingPanelOptions } from '../basic/floating-panel';
 import { FloatingPanel } from '../basic/floating-panel';
 
 /** 板块 key */
-type TaskSectionKey = 'checklist' | 'file';
+type TaskSectionKey = 'checklist' | 'weekGoal' | 'file';
 
 /** 板块：顺序与文案 */
 const TASK_SECTIONS: { key: TaskSectionKey; labelKey: Parameters<typeof t>[0] }[] = [
     { key: 'checklist', labelKey: 'interface.bottomTabChecklist' },
+    { key: 'weekGoal', labelKey: 'panel.weekGoalTab' },
     { key: 'file', labelKey: 'interface.bottomTabFile' },
 ];
 
@@ -48,6 +56,8 @@ export class TaskSectionsPanel extends FloatingPanel {
     private fileCreateMode = false;
     /** 文件编辑面板（切换文件时销毁重建） */
     private fileEditorPanel: FileEditorPanel | null = null;
+    /** 「一周目标」板块当前查看的周键（默认本周） */
+    private weekGoalWeekKey: string = getCurrentWeekKey();
 
     constructor(options: TaskSectionsPanelOptions) {
         super({
@@ -159,6 +169,11 @@ export class TaskSectionsPanel extends FloatingPanel {
                 ...items.filter((item) => item.done),
             ];
             for (const item of ordered) this.renderChecklistRow(content, item);
+            return;
+        }
+
+        if (this.section === 'weekGoal') {
+            this.renderWeekGoal(content, task);
             return;
         }
 
@@ -307,6 +322,197 @@ export class TaskSectionsPanel extends FloatingPanel {
             },
         });
         this.fileEditorPanel.open();
+    }
+
+    /** 「一周目标」板块：顶部周切换 + 周一到周日 7 个方框（左侧星期标题，右侧日目标勾选列表） */
+    private renderWeekGoal(container: HTMLElement, task: PrototypeTask): void {
+        container.empty();
+        const wrap = container.createDiv({ cls: 'task-week-goal' });
+
+        // 第一行：周切换按钮（上一周 / 周数 / 下一周）
+        const nav = wrap.createDiv({ cls: 'task-week-goal-nav' });
+        const prevBtn = nav.createEl('button', {
+            cls: 'task-week-goal-nav-btn',
+            attr: { type: 'button', 'aria-label': t('panel.weekGoalPrevWeek') },
+        });
+        setIcon(prevBtn, 'chevron-left');
+        prevBtn.addEventListener('click', () => {
+            this.weekGoalWeekKey = shiftWeekKey(this.weekGoalWeekKey, -1);
+            this.render();
+        });
+
+        const { week } = parseWeekKey(this.weekGoalWeekKey);
+        const label = nav.createDiv({ cls: 'task-week-goal-nav-label' });
+        label.createSpan({ cls: 'task-week-goal-nav-week', text: `W${String(week).padStart(2, '0')}` });
+        const mondayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, 1);
+        const sundayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, 7);
+        label.createSpan({
+            cls: 'task-week-goal-nav-range',
+            text: `${Number(mondayKey.slice(5, 7))}/${Number(mondayKey.slice(8, 10))} - ${Number(sundayKey.slice(5, 7))}/${Number(sundayKey.slice(8, 10))}`,
+        });
+        if (this.weekGoalWeekKey === getCurrentWeekKey()) label.addClass('is-current');
+
+        const nextBtn = nav.createEl('button', {
+            cls: 'task-week-goal-nav-btn',
+            attr: { type: 'button', 'aria-label': t('panel.weekGoalNextWeek') },
+        });
+        setIcon(nextBtn, 'chevron-right');
+        nextBtn.addEventListener('click', () => {
+            this.weekGoalWeekKey = shiftWeekKey(this.weekGoalWeekKey, 1);
+            this.render();
+        });
+
+        // 周一到周日：每天一个方框
+        const list = wrap.createDiv({ cls: 'task-week-goal-list' });
+        const weekdayKeys: Parameters<typeof t>[0][] = [
+            'week.monday',
+            'week.tuesday',
+            'week.wednesday',
+            'week.thursday',
+            'week.friday',
+            'week.saturday',
+            'week.sunday',
+        ];
+        for (let day = 1; day <= 7; day += 1) {
+            const dayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, day);
+            this.renderWeekGoalDay(list, task, dayKey, t(weekdayKeys[day - 1]));
+        }
+    }
+
+    /** 单日方框：左侧星期标题，右侧工具行（未排布到日计划 + 按钮）+ 分割线 + 日目标列表 */
+    private renderWeekGoalDay(
+        parentEl: HTMLElement,
+        task: PrototypeTask,
+        dayKey: string,
+        weekdayLabel: string,
+    ): void {
+        const box = parentEl.createDiv({ cls: 'task-week-goal-day' });
+        if (dayKey === getCurrentDayKey()) box.addClass('is-today');
+
+        const head = box.createDiv({ cls: 'task-week-goal-day-head' });
+        head.createSpan({ cls: 'task-week-goal-day-name', text: weekdayLabel });
+        head.createSpan({
+            cls: 'task-week-goal-day-date',
+            text: `${Number(dayKey.slice(5, 7))}/${Number(dayKey.slice(8, 10))}`,
+        });
+
+        const body = box.createDiv({ cls: 'task-week-goal-day-body' });
+
+        // 顶部工具行：左侧文字「未排布到日计划」，右侧 + 按钮
+        const toolbar = body.createDiv({ cls: 'task-week-goal-day-toolbar' });
+        toolbar.createSpan({ cls: 'task-week-goal-day-toolbar-label', text: t('panel.weekGoalUnplanned') });
+        const addBtn = toolbar.createEl('button', {
+            cls: 'task-week-goal-day-add',
+            attr: { type: 'button', 'aria-label': t('common.add') },
+        });
+        setIcon(addBtn, 'plus');
+        addBtn.addEventListener('click', () => this.startAddDayGoal(body, task, dayKey));
+
+        // 分割线
+        body.createDiv({ cls: 'task-week-goal-day-divider' });
+
+        // 日目标列表
+        const list = body.createDiv({ cls: 'task-week-goal-day-list' });
+        const entries = task.dayGoals?.[dayKey] ?? [];
+        if (entries.length === 0) {
+            list.createDiv({ cls: 'task-week-goal-day-empty', text: t('panel.weekGoalEmpty') });
+        }
+        for (const entry of entries) {
+            const row = list.createDiv({ cls: 'task-week-goal-item' });
+            row.toggleClass('is-done', entry.done === true);
+            const checkbox = row.createEl('input', { cls: 'task-week-goal-item-check' });
+            checkbox.type = 'checkbox';
+            checkbox.checked = entry.done === true;
+            checkbox.addEventListener('change', () => {
+                void this.toggleDayGoal(task, dayKey, entry.id, checkbox.checked);
+            });
+            row.createSpan({ cls: 'task-week-goal-item-text', text: entry.text });
+            const delBtn = row.createEl('button', {
+                cls: 'task-week-goal-item-delete',
+                attr: { type: 'button', 'aria-label': t('common.delete') },
+            });
+            setIcon(delBtn, 'x');
+            delBtn.addEventListener('click', () => void this.removeDayGoal(task, dayKey, entry.id));
+        }
+    }
+
+    /** 在列表末尾插入一个输入行，回车 / 失焦提交，Esc 取消 */
+    private startAddDayGoal(body: HTMLElement, task: PrototypeTask, dayKey: string): void {
+        // 已有输入行时不重复聚焦
+        const existing = body.querySelector<HTMLInputElement>('.task-week-goal-add-input');
+        if (existing) {
+            existing.focus();
+            return;
+        }
+        const list = body.querySelector<HTMLElement>('.task-week-goal-day-list');
+        if (!list) return;
+        list.querySelector('.task-week-goal-day-empty')?.remove();
+
+        const inputRow = list.createDiv({ cls: 'task-week-goal-add-row' });
+        const input = inputRow.createEl('input', {
+            cls: 'task-week-goal-add-input',
+            attr: { type: 'text', placeholder: t('panel.weekGoalAddPlaceholder') },
+        });
+        input.focus();
+
+        let finished = false;
+        const finish = (commit: boolean): void => {
+            if (finished) return;
+            finished = true;
+            const text = input.value.trim();
+            inputRow.remove();
+            if (commit && text) void this.addDayGoal(task, dayKey, text);
+            else this.render();
+        };
+        input.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Enter') {
+                evt.preventDefault();
+                finish(true);
+            } else if (evt.key === 'Escape') {
+                evt.preventDefault();
+                finish(false);
+            }
+        });
+        input.addEventListener('blur', () => finish(true));
+    }
+
+    /** 新增日目标 */
+    private async addDayGoal(task: PrototypeTask, dayKey: string, text: string): Promise<void> {
+        const entry: TaskDayGoalEntry = {
+            id: `dgoal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            text,
+            createdAt: Date.now(),
+        };
+        task.dayGoals = { ...(task.dayGoals ?? {}) };
+        task.dayGoals[dayKey] = [...(task.dayGoals[dayKey] ?? []), entry];
+        await this.sectionsOptions.save();
+        this.render();
+    }
+
+    /** 切换日目标完成状态 */
+    private async toggleDayGoal(
+        task: PrototypeTask,
+        dayKey: string,
+        entryId: string,
+        done: boolean,
+    ): Promise<void> {
+        const entry = task.dayGoals?.[dayKey]?.find((item) => item.id === entryId);
+        if (!entry) return;
+        if (done) entry.done = true;
+        else delete entry.done;
+        await this.sectionsOptions.save();
+        this.render();
+    }
+
+    /** 删除日目标 */
+    private async removeDayGoal(task: PrototypeTask, dayKey: string, entryId: string): Promise<void> {
+        const list = task.dayGoals?.[dayKey];
+        if (!list) return;
+        const next = list.filter((item) => item.id !== entryId);
+        if (next.length > 0) task.dayGoals![dayKey] = next;
+        else delete task.dayGoals![dayKey];
+        await this.sectionsOptions.save();
+        this.render();
     }
 
     /** 条目行：图标 + 文本 */

@@ -7729,6 +7729,17 @@ button.swimlane-section-card-settings {
     margin-bottom: 6px;
 }
 
+/* 任务板块面板「一周目标」：内容区高度由外层 max-height 约束，内部列表自行滚动 */
+.task-sections-body .task-week-goal {
+    flex: none;
+    height: auto;
+}
+
+.task-sections-body .task-week-goal-list {
+    flex: none;
+    overflow-y: visible;
+}
+
 /* 综合方框：选项卡内容（进行中任务的收集篮子 / 待办改进 / 文件目录） */
 .interface-bottom-body {
     display: flex;
@@ -9914,6 +9925,11 @@ button.task-detail-todo-tool-btn:disabled {
     flex-direction: column;
     gap: 8px;
     padding: 2px;
+    /* 撑满选项卡可用高度，内容超出时在内部滚动 */
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .goal-list-item-icon {
@@ -10078,7 +10094,122 @@ button.task-detail-todo-tool-btn:disabled {
     overflow-y: auto;
 }
 
+/* 目标清单方框：未分配目标与按周排列的目标各占一个独立方框 */
+.goal-list-box {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+}
+
+/* 未分配方框：与下方按周排列的方框区分开 */
+.goal-list-box.is-unassigned {
+    background: var(--sdt-control-bg, var(--background-primary));
+}
+
+/* 左列：周数卡片，按时间从上到下排列，始终左对齐；卡片固定高度，不受右侧行高影响 */
+.goal-list-week-col {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 右列：目标行 */
+.goal-list-row-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 左列周数卡片：独立方块，固定高度（周数 + 周一日期） */
+.goal-list-week-card {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    box-sizing: border-box;
+    min-width: 44px;
+    height: 40px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    background: var(--sdt-interactive-bg, var(--interactive-normal));
+}
+
+.goal-list-week-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--interactive-accent);
+    white-space: nowrap;
+}
+
+.goal-list-week-card-date {
+    font-size: 10px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    white-space: nowrap;
+}
+
+/* 未分配：占位样式 */
+.goal-list-week-card.is-unassigned .goal-list-week-card-label {
+    font-weight: 400;
+    color: var(--text-faint);
+}
+
+/* 目标行容器：只负责横向排布，本身不画边框 / 背景 */
 .goal-list-item {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* 未分配目标行：固定高度，内容多时行内滚动，避免撑高整行挤占下方周卡片 */
+.goal-list-item.is-unassigned {
+    height: 40px;
+    box-sizing: border-box;
+}
+
+.goal-list-item.is-unassigned .goal-list-item-content {
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+/* 跨周竖线：从 target 图标向下延伸到结束周卡片中心（绝对定位，不影响行高） */
+.goal-list-item-week-line {
+    position: absolute;
+    width: 1px;
+    background: var(--interactive-accent);
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* 竖线终点圆点：以自身中心对齐终点坐标 */
+.goal-list-item-week-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: var(--interactive-accent);
+    pointer-events: none;
+}
+
+/* 右侧内容区：独立方块，第一行名称 + 操作图标，第二行子任务与截止日期 */
+.goal-list-item-content {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -10088,7 +10219,7 @@ button.task-detail-todo-tool-btn:disabled {
     background: var(--sdt-control-bg, var(--background-primary));
 }
 
-.goal-list-item:hover {
+.goal-list-item:hover .goal-list-item-content {
     background: var(--sdt-hover-bg, var(--background-modifier-hover));
 }
 
@@ -10271,6 +10402,50 @@ button.task-detail-todo-tool-btn:disabled {
     color: var(--text-faint);
 }
 
+/* 目标「分配周数」小面板：挂在 body 上，fixed 定位 */
+.goal-week-assign-popover {
+    position: fixed;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 232px;
+    padding: 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.goal-week-assign-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.goal-week-assign-label {
+    flex: 0 0 48px;
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.goal-week-assign-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.goal-week-assign-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.goal-week-assign-btn {
+    padding: 3px 10px;
+    font-size: 12px;
+}
+
 /* 分区内容容器：同一时刻只显示一个分区 */
 .task-detail-sections {
     flex: 1;
@@ -10295,6 +10470,266 @@ button.task-detail-todo-tool-btn:disabled {
 .task-detail-section-body {
     flex: 1;
     min-height: 0;
+}
+
+/* ======================== 任务详情「一周目标」选项卡 ======================== */
+.task-week-goal {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* 用 flex 撑满父级可用高度（height: 100% 会随内容增长，导致列表无法滚动） */
+    flex: 1;
+    min-height: 0;
+}
+
+/* 第一行：周切换（上一周 / 周数 + 日期范围 / 下一周） */
+.task-week-goal-nav {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.task-week-goal-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 4px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-week-goal-nav-btn:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-week-goal-nav-btn .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.task-week-goal-nav-label {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.task-week-goal-nav-label.is-current .task-week-goal-nav-week {
+    color: var(--interactive-accent);
+}
+
+.task-week-goal-nav-week {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-week-goal-nav-range {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+/* 周一到周日：纵向排列的方框列表 */
+.task-week-goal-list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+}
+
+/* 单日方框：左侧星期标题，右侧为工具行 + 分割线 + 日目标列表 */
+.task-week-goal-day {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+}
+
+/* 工具行：左侧「未排布到日计划」文字，右侧 + 按钮 */
+.task-week-goal-day-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.task-week-goal-day-toolbar-label {
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+/* + 按钮：点击后在列表末尾新增一个目标行 */
+.task-week-goal-day-add {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-week-goal-day-add:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-week-goal-day-add .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+/* 工具行与日目标列表之间的分割线 */
+.task-week-goal-day-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--sdt-card-border, var(--background-modifier-border));
+}
+
+/* 日目标列表 */
+.task-week-goal-day-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.task-week-goal-day.is-today {
+    border-color: var(--interactive-accent);
+}
+
+.task-week-goal-day-head {
+    flex: 0 0 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-top: 2px;
+}
+
+.task-week-goal-day-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-week-goal-day.is-today .task-week-goal-day-name {
+    color: var(--interactive-accent);
+}
+
+.task-week-goal-day-date {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.task-week-goal-day-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.task-week-goal-day-empty {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+/* 日目标条目：勾选框 + 文字 + 删除按钮 */
+.task-week-goal-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.task-week-goal-item-check {
+    flex: 0 0 auto;
+    margin: 0;
+    cursor: pointer;
+}
+
+.task-week-goal-item-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+/* 已完成：仅置灰 */
+.task-week-goal-item.is-done .task-week-goal-item-text {
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.task-week-goal-item-delete {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.task-week-goal-item:hover .task-week-goal-item-delete {
+    opacity: 1;
+}
+
+.task-week-goal-item-delete:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+    color: var(--text-error);
+}
+
+.task-week-goal-item-delete .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* 添加输入行 */
+.task-week-goal-add-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.task-week-goal-add-input {
+    flex: 1;
+    min-width: 0;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 3px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    font-size: 12px;
 }
 
 /* 右侧标题区：名称 / 分类两行 + 跨两行的归档、删除方块按钮 */

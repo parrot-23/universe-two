@@ -15,7 +15,7 @@ import type { GtdData } from '../datatypes/gtd';
 import { defaultGtdData } from '../datatypes/gtd';
 import type { PlanAssignmentData } from '../datatypes/plan-assignment';
 import type { InterfaceLayoutData } from '../datatypes/interface-layout';
-import type { PrototypeTask, TaskGoalEntry, TaskHabit } from '../datatypes/prototype-task';
+import type { PrototypeTask, TaskDayGoalEntry, TaskGoalEntry, TaskHabit } from '../datatypes/prototype-task';
 import type { TaskExecutionData } from '../datatypes/task-execution';
 import type { TimeBoxData } from '../datatypes/timebox-data';
 import type { ThemeData, Theme } from '../datatypes/theme';
@@ -354,6 +354,7 @@ function parsePrototypeTasks(raw: unknown): PrototypeTask[] {
             ...(typeof r.fileDir === 'string' && r.fileDir ? { fileDir: r.fileDir } : {}),
             ...(r.fileTimestamp === true ? { fileTimestamp: true } : {}),
             ...(parseTaskGoals(r.goals) ? { goals: parseTaskGoals(r.goals)! } : {}),
+            ...(parseTaskDayGoals(r.dayGoals) ? { dayGoals: parseTaskDayGoals(r.dayGoals)! } : {}),
             ...(r.archived === true ? { archived: true } : {}),
             createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
         });
@@ -377,9 +378,34 @@ function parseTaskGoals(raw: unknown): TaskGoalEntry[] | null {
             ...(typeof r.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dueDate) ? { dueDate: r.dueDate } : {}),
             ...(subtaskIds.length > 0 ? { subtaskIds } : {}),
             ...(r.done === true ? { done: true } : {}),
+            ...(typeof r.startWeek === 'string' && /^\d{4}-W\d{2}$/.test(r.startWeek) ? { startWeek: r.startWeek } : {}),
+            ...(typeof r.endWeek === 'string' && /^\d{4}-W\d{2}$/.test(r.endWeek) ? { endWeek: r.endWeek } : {}),
         });
     }
     return goals.length > 0 ? goals : null;
+}
+
+/** 解析日目标（键为日期 YYYY-MM-DD；无有效条目时返回 null） */
+function parseTaskDayGoals(raw: unknown): Record<string, TaskDayGoalEntry[]> | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const result: Record<string, TaskDayGoalEntry[]> = {};
+    for (const [dayKey, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !Array.isArray(value)) continue;
+        const entries: TaskDayGoalEntry[] = [];
+        for (const entry of value) {
+            if (!entry || typeof entry !== 'object') continue;
+            const r = entry as Record<string, unknown>;
+            if (typeof r.id !== 'string' || typeof r.text !== 'string') continue;
+            entries.push({
+                id: r.id,
+                text: r.text,
+                createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
+                ...(r.done === true ? { done: true } : {}),
+            });
+        }
+        if (entries.length > 0) result[dayKey] = entries;
+    }
+    return Object.keys(result).length > 0 ? result : null;
 }
 
 /** 解析目标绑定的子任务 id（兼容早期的单值 subtaskId 字段） */
