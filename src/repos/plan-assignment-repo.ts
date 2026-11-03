@@ -40,6 +40,11 @@ export class PlanAssignmentRepo {
         return this.data.weekAssignments.filter((assignment) => assignment.weekKey === weekKey);
     }
 
+    /** 某个任务的全部整周排布（按排布顺序） */
+    taskWeekAssignments(taskId: string): WeekAssignment[] {
+        return this.data.weekAssignments.filter((assignment) => assignment.taskId === taskId);
+    }
+
     /** 把任务整周排布到某一周；重复排布同一任务时直接返回已有记录 */
     addWeek(weekKey: string, taskId: string): WeekAssignment {
         const existing = this.data.weekAssignments.find(

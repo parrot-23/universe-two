@@ -18,6 +18,7 @@ import { DataPanel } from '../../component/panel/check/data-panel';
 import { GalleryPanel } from '../../component/panel/gallery/gallery-panel';
 import { GoalPanel } from '../../component/panel/goal/goal-panel';
 import { PlanPanel } from '../../component/panel/plan/plan-panel';
+import { PlanAnnualPanel } from '../../component/panel/plan/plan-annual-panel';
 import { TaskSectionsPanel } from '../../component/panel/task/task-sections-panel';
 import { TaskDetailPanel } from '../../component/panel/task/task-detail-panel';
 import { TaskConfigPanel, type TaskConfigSavePayload } from '../../component/panel/task/task-config-panel';
@@ -100,6 +101,8 @@ export class InterfaceView {
     private themeDispose: (() => void) | null = null;
     /** 计划卡片对应的面板 */
     private planPanel: PlanPanel | null = null;
+    /** 计划年度卡片对应的面板 */
+    private planAnnualPanel: PlanAnnualPanel | null = null;
     /** 检查卡片对应的面板 */
     private checkPanel: CheckPanel | null = null;
     /** 收集卡片对应的面板 */
@@ -267,6 +270,34 @@ export class InterfaceView {
             });
         }
         this.planPanel.open();
+    }
+
+    /** 点击计划年度卡片：打开计划年度面板 */
+    private openPlanAnnualPanel(): void {
+        if (!this.planAnnualPanel) {
+            const holder = this.plugin as Plugin & {
+                planAssignmentRepo: ConstructorParameters<typeof PlanAnnualPanel>[0]['planAssignmentRepo'];
+                saveAll: () => Promise<void>;
+            };
+            this.planAnnualPanel = new PlanAnnualPanel({
+                container: this.panelContainer,
+                getTasks: () => this.prototypeTaskRepo.tasks,
+                getCategories: () => this.categoryData.categories,
+                planAssignmentRepo: holder.planAssignmentRepo,
+                save: () => holder.saveAll(),
+                onChanged: () => {
+                    this.todayCard?.refreshTasks();
+                    this.todayTasksCard?.refresh();
+                    this.clockCard?.refresh();
+                },
+                onOpenTaskDetail: (taskId) => {
+                    const task = this.prototypeTaskRepo.tasks.find((item) => item.id === taskId);
+                    if (!task) return;
+                    this.openTaskDetail(task);
+                },
+            });
+        }
+        this.planAnnualPanel.open();
     }
 
     /** 点击检查卡片：打开检查面板 */
@@ -544,6 +575,7 @@ export class InterfaceView {
                     { labelKey: 'interface.timeBox', icon: 'calendar-clock', onClick: () => this.openTimeBoxPanel() },
                     { labelKey: 'interface.task', icon: 'list-todo', onClick: () => this.openTaskPanel() },
                     { labelKey: 'interface.plan', icon: 'calendar-days', onClick: () => this.openPlanPanel() },
+                    { labelKey: 'interface.planAnnual', icon: 'calendar-range', onClick: () => this.openPlanAnnualPanel() },
                     { labelKey: 'interface.check', icon: 'clipboard-check', onClick: () => this.openCheckPanel() },
                     { labelKey: 'interface.collect', icon: 'inbox', onClick: () => this.openCollectPanel() },
                     { labelKey: 'interface.gallery', icon: 'image', onClick: () => this.openGalleryPanel() },

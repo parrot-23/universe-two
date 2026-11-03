@@ -9559,6 +9559,69 @@ button.swimlane-section-card-settings {
     height: 13px;
 }
 
+/* 计划年度面板：任务树行末尾的状态图标可点击，弹出状态下拉列表 */
+.plan-annual-status-btn {
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.plan-annual-status-btn:hover {
+    color: var(--sdt-text-primary, var(--text-normal));
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+/* 未开始状态：仅在选中任务时显示图标 */
+.plan-annual-status-btn.is-not-started {
+    visibility: hidden;
+}
+
+.task-detail-tree-row.is-selected .plan-annual-status-btn.is-not-started {
+    visibility: visible;
+}
+
+.plan-annual-status-menu {
+    position: fixed;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 120px;
+    padding: 4px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.plan-annual-status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+    cursor: pointer;
+}
+
+.plan-annual-status-item:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.plan-annual-status-item.is-active {
+    color: var(--interactive-accent);
+    font-weight: 600;
+}
+
+.plan-annual-status-item-icon {
+    display: inline-flex;
+}
+
+.plan-annual-status-item-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
 /* 右侧内容区：顶部选项卡 + 分区滚动 */
 .task-detail-right {
     flex: 1;
@@ -12499,6 +12562,542 @@ button.task-record-dropdown-item.is-selected {
     flex-shrink: 0;
     color: var(--sdt-text-secondary, var(--text-muted));
     font-variant-numeric: tabular-nums;
+}
+
+/* ======================== 计划年度面板（panel/plan/plan-annual-panel） ======================== */
+.floating-panel-body.plan-annual-panel {
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
+    flex: 0 0 auto;
+    height: 60vh;
+    min-height: 300px;
+    max-height: calc(100vh - 150px);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* 左侧：顶部占位 + 根任务下拉 + 任务树 + 底部工具栏 */
+.plan-annual-left {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 14px;
+    box-sizing: border-box;
+    border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+/* 顶部占位：与右侧季度导航行等高，使下拉列表与右侧周列表头起始位置一致；内含「目标」「任务」按钮 */
+.plan-annual-left-placeholder {
+    flex: 0 0 auto;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 根任务下拉：与右侧周列表头等高，保证任务树行与泳道行对齐 */
+.plan-annual-root-select {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 34px;
+    box-sizing: border-box;
+}
+
+.plan-annual-tree {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* 任务树行固定行高，与右侧泳道行一致 */
+.plan-annual-tree-row {
+    height: 26px;
+    box-sizing: border-box;
+}
+
+/* 目标列表：与任务树共用同一位置，按模式互斥显示 */
+.plan-annual-goal-list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+}
+
+.plan-annual-goal-list.is-hidden,
+.plan-annual-tree.is-hidden {
+    display: none;
+}
+
+/* 目标条目：卡片行（图标 + 目标文字） */
+.plan-annual-goal-item {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.plan-annual-goal-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    color: var(--interactive-accent);
+}
+
+.plan-annual-goal-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.plan-annual-goal-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 目标卡片末尾的日历图标：点击选择分配到某一周 */
+.plan-annual-goal-week-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 2px;
+    border-radius: 3px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.plan-annual-goal-week-btn:hover {
+    color: var(--sdt-text-primary, var(--text-normal));
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+/* 已分配到周：图标高亮 */
+.plan-annual-goal-week-btn.is-assigned {
+    color: var(--interactive-accent);
+}
+
+.plan-annual-goal-week-btn .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+/* 周选择菜单：周数较多时限制高度并滚动 */
+.plan-annual-week-menu {
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+/* 已完成目标：置灰加删除线 */
+.plan-annual-goal-item.is-done .plan-annual-goal-text {
+    color: var(--sdt-text-secondary, var(--text-muted));
+    text-decoration: line-through;
+}
+
+/* 末尾「添加目标」卡片：虚线边框，点击后变为内联输入框 */
+.plan-annual-goal-add {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border: 1px dashed var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.plan-annual-goal-add:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.plan-annual-goal-add.is-editing {
+    cursor: default;
+    padding: 2px 4px;
+}
+
+.plan-annual-goal-add-icon {
+    display: inline-flex;
+}
+
+.plan-annual-goal-add-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.plan-annual-goal-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+}
+
+/* 左侧底部工具栏：高度随按钮自适应 */
+.plan-annual-left-toolbar {
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    border-top: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+/* 右侧：季度导航行 + 周列表头 + 泳道行 + 目标占位面板 */
+.plan-annual-right {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.plan-annual-nav {
+    flex: 0 0 auto;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 周列表头：每列均分，与行内列背景层宽度一致 */
+.plan-annual-header {
+    flex: 0 0 auto;
+    height: 34px;
+    display: flex;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.plan-annual-header-cell {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 2px;
+    border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.plan-annual-header-cell.is-current {
+    color: var(--interactive-accent);
+    font-weight: 600;
+    background: repeating-linear-gradient(
+        45deg,
+        var(--background-modifier-hover) 0,
+        var(--background-modifier-hover) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+
+.plan-annual-header-month {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-accent);
+}
+
+.plan-annual-header-week {
+    font-weight: 600;
+}
+
+.plan-annual-header-date {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+/* 泳道区：纵向滚动，行高与左侧任务树行一致 */
+.plan-annual-lanes {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.plan-annual-lane-row {
+    position: relative;
+    height: 26px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.plan-annual-lane-row:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.plan-annual-lane-row.is-selected {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+/* 列背景层：每列一个元素，负责竖向分隔线与拖拽新建 */
+.plan-annual-lane-columns {
+    position: absolute;
+    inset: 0;
+    display: flex;
+}
+
+.plan-annual-lane-column {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+/* 排布区间色块：绝对定位，left / width 按周列百分比计算 */
+.plan-annual-bar {
+    position: absolute;
+    top: 50%;
+    height: 14px;
+    transform: translateY(-50%);
+    box-sizing: border-box;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.plan-annual-bar.is-selected {
+    outline: 1px solid var(--interactive-accent);
+    outline-offset: 1px;
+}
+
+/* 跨季度截断提示箭头 */
+.plan-annual-bar-clip {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    color: var(--text-on-accent);
+    pointer-events: none;
+}
+
+.plan-annual-bar-clip.is-start {
+    left: 0;
+}
+
+.plan-annual-bar-clip.is-end {
+    right: 0;
+}
+
+.plan-annual-bar-clip .svg-icon {
+    width: 10px;
+    height: 10px;
+}
+
+/* 左右拖拽手柄：悬浮或选中时显示 */
+.plan-annual-bar-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: ew-resize;
+}
+
+.plan-annual-bar-handle::after {
+    content: '';
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: #ffffff;
+}
+
+.plan-annual-bar-handle.is-start {
+    left: -2px;
+}
+
+.plan-annual-bar-handle.is-end {
+    right: -2px;
+}
+
+.plan-annual-bar:hover .plan-annual-bar-handle,
+.plan-annual-bar.is-selected .plan-annual-bar-handle {
+    display: flex;
+}
+
+/* 拖拽预览色块：半透明虚线 */
+.plan-annual-bar-preview {
+    position: absolute;
+    top: 50%;
+    height: 14px;
+    transform: translateY(-50%);
+    box-sizing: border-box;
+    border: 1px dashed var(--interactive-accent);
+    border-radius: 3px;
+    background: var(--interactive-accent);
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* 拖拽周区间提示浮层（挂在 body 上，跟随鼠标） */
+.plan-annual-drag-tip {
+    position: fixed;
+    z-index: 1100;
+    padding: 3px 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 4px;
+    background: var(--background-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    font-size: 11px;
+    color: var(--sdt-text-primary, var(--text-normal));
+    pointer-events: none;
+}
+
+/* 拖拽期间全局光标 */
+body.plan-annual-dragging {
+    cursor: col-resize;
+    user-select: none;
+}
+
+/* 右侧底部：目标区（与上方周列对齐，高度随目标行数自适应，最高 160px） */
+.plan-annual-goal {
+    flex: 0 0 auto;
+    max-height: 160px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6px 0;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 8px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    overflow-y: auto;
+}
+
+.plan-annual-goal-empty {
+    align-self: center;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+/* 目标行层：相对定位，目标行按周列百分比定位 */
+.plan-annual-goal-body {
+    position: relative;
+    flex: 0 0 auto;
+    margin: 0 1px;
+}
+
+/* 目标行：图标 + 文字，图标落在绑定周列，文字向右延伸 */
+.plan-annual-goal-row {
+    position: absolute;
+    height: 18px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 4px;
+    font-size: 11px;
+    color: var(--text-normal);
+    overflow: hidden;
+}
+
+.plan-annual-goal-row-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.plan-annual-goal-row-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.plan-annual-goal-row-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 已完成目标：图标高亮 + 文字删除线 */
+.plan-annual-goal-row.is-done .plan-annual-goal-row-icon {
+    color: var(--interactive-accent);
+}
+
+.plan-annual-goal-row.is-done .plan-annual-goal-row-text {
+    color: var(--text-faint);
+    text-decoration: line-through;
+}
+
+/* 底部目标区悬浮面板：显示悬浮周列绑定的全部目标 */
+.plan-annual-goal-tip {
+    position: fixed;
+    z-index: 1100;
+    min-width: 120px;
+    max-width: 260px;
+    padding: 6px 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--background-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    font-size: 11px;
+    color: var(--sdt-text-primary, var(--text-normal));
+    pointer-events: none;
+}
+
+.plan-annual-goal-tip-title {
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.plan-annual-goal-tip-empty {
+    color: var(--text-faint);
+}
+
+.plan-annual-goal-tip-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.plan-annual-goal-tip-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.plan-annual-goal-tip-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.plan-annual-goal-tip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.plan-annual-goal-tip-item.is-done .plan-annual-goal-tip-icon {
+    color: var(--interactive-accent);
+}
+
+.plan-annual-goal-tip-item.is-done .plan-annual-goal-tip-text {
+    color: var(--text-faint);
+    text-decoration: line-through;
 }
 
 /* ======================== 公共悬浮面板（panel/floating-panel：可拖动卡片） ======================== */
