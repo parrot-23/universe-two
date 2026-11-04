@@ -65,6 +65,19 @@ export class PlanAssignmentRepo {
         if (index >= 0) assignments.splice(index, 1);
     }
 
+    /** 某一周的具体描述（未填写时返回空串） */
+    weekNote(weekKey: string): string {
+        return this.data.weekNotes?.[weekKey] ?? '';
+    }
+
+    /** 写入某一周的具体描述；内容为空时删除该键 */
+    setWeekNote(weekKey: string, text: string): void {
+        const notes = (this.data.weekNotes ??= {});
+        const trimmed = text.trim();
+        if (trimmed) notes[weekKey] = trimmed;
+        else delete notes[weekKey];
+    }
+
     /** 移除某一天已排布的任务；不存在时忽略 */
     remove(weekKey: string, weekday: number, taskId: string): void {
         const assignments = this.data.assignments;

@@ -29,4 +29,6 @@ export interface PlanAssignmentData {
     assignments: PlanAssignment[];
     /** 按周排布（年视图），旧数据缺失时视为空 */
     weekAssignments: WeekAssignment[];
+    /** 周描述：周键 → 本周的具体描述文本，旧数据缺失时视为空 */
+    weekNotes?: Record<string, string>;
 }

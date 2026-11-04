@@ -19,6 +19,7 @@ import { GalleryPanel } from '../../component/panel/gallery/gallery-panel';
 import { GoalPanel } from '../../component/panel/goal/goal-panel';
 import { PlanPanel } from '../../component/panel/plan/plan-panel';
 import { PlanAnnualPanel } from '../../component/panel/plan/plan-annual-panel';
+import { PlanWeekPanel } from '../../component/panel/plan/plan-week-panel';
 import { TaskSectionsPanel } from '../../component/panel/task/task-sections-panel';
 import { TaskDetailPanel } from '../../component/panel/task/task-detail-panel';
 import { TaskConfigPanel, type TaskConfigSavePayload } from '../../component/panel/task/task-config-panel';
@@ -103,6 +104,8 @@ export class InterfaceView {
     private planPanel: PlanPanel | null = null;
     /** 计划年度卡片对应的面板 */
     private planAnnualPanel: PlanAnnualPanel | null = null;
+    /** 计划一周卡片对应的面板 */
+    private planWeekPanel: PlanWeekPanel | null = null;
     /** 检查卡片对应的面板 */
     private checkPanel: CheckPanel | null = null;
     /** 收集卡片对应的面板 */
@@ -298,6 +301,30 @@ export class InterfaceView {
             });
         }
         this.planAnnualPanel.open();
+    }
+
+    /** 点击计划一周卡片：打开计划一周面板 */
+    private openPlanWeekPanel(): void {
+        if (!this.planWeekPanel) {
+            const holder = this.plugin as Plugin & {
+                planAssignmentRepo: ConstructorParameters<typeof PlanWeekPanel>[0]['planAssignmentRepo'];
+                saveAll: () => Promise<void>;
+            };
+            this.planWeekPanel = new PlanWeekPanel({
+                container: this.panelContainer,
+                getTasks: () => this.prototypeTaskRepo.tasks,
+                planAssignmentRepo: holder.planAssignmentRepo,
+                getCategories: () => this.categoryData.categories,
+                taskExecutionRepo: this.taskExecutionRepo,
+                save: () => holder.saveAll(),
+                onChanged: () => {
+                    this.todayCard?.refreshTasks();
+                    this.todayTasksCard?.refresh();
+                    this.clockCard?.refresh();
+                },
+            });
+        }
+        this.planWeekPanel.open();
     }
 
     /** 点击检查卡片：打开检查面板 */
@@ -576,6 +603,7 @@ export class InterfaceView {
                     { labelKey: 'interface.task', icon: 'list-todo', onClick: () => this.openTaskPanel() },
                     { labelKey: 'interface.plan', icon: 'calendar-days', onClick: () => this.openPlanPanel() },
                     { labelKey: 'interface.planAnnual', icon: 'calendar-range', onClick: () => this.openPlanAnnualPanel() },
+                    { labelKey: 'interface.planWeek', icon: 'calendar-check', onClick: () => this.openPlanWeekPanel() },
                     { labelKey: 'interface.check', icon: 'clipboard-check', onClick: () => this.openCheckPanel() },
                     { labelKey: 'interface.collect', icon: 'inbox', onClick: () => this.openCollectPanel() },
                     { labelKey: 'interface.gallery', icon: 'image', onClick: () => this.openGalleryPanel() },
