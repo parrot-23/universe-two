@@ -19,7 +19,6 @@ import { ensureTaskFileDir, revealFolderInExplorer } from '../../../shared/task-
 import { ConfirmModal } from '../../ob/confirm-modal';
 import { FileEditorPanel } from '../basic/file-editor-panel';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
-import { GoalListView } from './goal-list-view';
 
 /** 任务详情面板配置 */
 export interface TaskDetailPanelOptions extends Omit<FloatingPanelOptions, 'title'> {
@@ -53,7 +52,6 @@ export interface TaskDetailPanelOptions extends Omit<FloatingPanelOptions, 'titl
 
 /** 右侧分区选项卡：showCount 为 true 时在标签后显示条目数量占位 */
 const SECTIONS: { labelKey: Parameters<typeof t>[0]; showCount?: boolean }[] = [
-    { labelKey: 'panel.goalTab' },
     { labelKey: 'panel.weekGoalTab' },
     { labelKey: 'panel.targetChecklist', showCount: true },
     { labelKey: 'panel.targetFile', showCount: true },
@@ -363,7 +361,6 @@ export class TaskDetailPanel extends FloatingPanel {
 
             const sectionEl = this.sectionsEl.createDiv({ cls: 'task-detail-section' });
             const sectionBody = sectionEl.createDiv({ cls: 'task-detail-section-body' });
-            if (section.labelKey === 'panel.goalTab') this.renderGoalSection(sectionBody);
             if (section.labelKey === 'panel.weekGoalTab') this.renderWeekGoalSection(sectionBody);
             if (section.labelKey === 'panel.targetChecklist') this.renderChecklist(sectionBody);
             if (section.labelKey === 'panel.targetFile') this.renderFiles(sectionBody);
@@ -454,16 +451,6 @@ export class TaskDetailPanel extends FloatingPanel {
         // 第二行：表单打卡内容（暂为占位）
         const body = this.settingPanelEl.createDiv({ cls: 'task-detail-setting-body' });
         body.createDiv({ cls: 'task-detail-setting-placeholder', text: t('panel.formCheckPending') });
-    }
-
-    /** 「目标」选项卡：目标清单（输入 / 绑定子任务 / 截止时间 / 列表） */
-    private renderGoalSection(container: HTMLElement): void {
-        new GoalListView(container, {
-            task: this.task,
-            getTasks: () => this.tasks,
-            save: this.panelOptions.save,
-            onChanged: () => this.renderTree(),
-        });
     }
 
     /** 「一周目标」选项卡：顶部周切换 + 周一到周日 7 个方框（左侧星期标题，右侧日目标勾选列表） */

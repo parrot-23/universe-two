@@ -334,12 +334,14 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.goalListEl.empty();
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         for (const goal of rootTask?.goals ?? []) {
-            const row = this.goalListEl.createDiv({ cls: 'plan-annual-goal-item' });
-            row.toggleClass('is-done', goal.done === true);
-            setIcon(row.createSpan({ cls: 'plan-annual-goal-icon' }), goal.done ? 'circle-check' : 'target');
-            row.createSpan({ cls: 'plan-annual-goal-text', text: goal.text });
+            const card = this.goalListEl.createDiv({ cls: 'plan-annual-goal-item' });
+            card.toggleClass('is-done', goal.done === true);
+            // 第一行：图标 + 目标文字 + 末尾日历图标
+            const main = card.createDiv({ cls: 'plan-annual-goal-main' });
+            setIcon(main.createSpan({ cls: 'plan-annual-goal-icon' }), goal.done ? 'circle-check' : 'target');
+            main.createSpan({ cls: 'plan-annual-goal-text', text: goal.text });
             // 末尾日历图标：点击选择把该目标分配到某一周
-            const weekBtn = row.createSpan({ cls: 'plan-annual-goal-week-btn' });
+            const weekBtn = main.createSpan({ cls: 'plan-annual-goal-week-btn' });
             weekBtn.toggleClass('is-assigned', !!goal.startWeek);
             setIcon(weekBtn, 'calendar');
             weekBtn.title = goal.startWeek
@@ -349,6 +351,14 @@ export class PlanAnnualPanel extends FloatingPanel {
                 evt.stopPropagation();
                 this.openGoalWeekMenu(weekBtn, goal);
             });
+            // 第二行：已分配的周数（未分配时显示提示文案）
+            const weekLabel = card.createDiv({ cls: 'plan-annual-goal-week-label' });
+            weekLabel.toggleClass('is-unassigned', !goal.startWeek);
+            weekLabel.setText(
+                goal.startWeek
+                    ? this.formatWeekRangeShort(goal.startWeek, goal.endWeek ?? goal.startWeek)
+                    : t('panel.planAnnualAssignWeek'),
+            );
         }
         this.renderGoalAddCard(rootTask);
     }
@@ -527,6 +537,7 @@ export class PlanAnnualPanel extends FloatingPanel {
                 void this.panelOptions.save();
                 this.closeStatusMenu();
                 this.renderTree();
+                this.renderLanes();
                 this.panelOptions.onChanged?.();
             });
         }
@@ -615,6 +626,14 @@ export class PlanAnnualPanel extends FloatingPanel {
     private renderGoalLanes(): void {
         this.goalEl.empty();
         this.hideGoalTip();
+        const count = this.quarterWeeks.length;
+        // 当前周列背景：与表头、泳道列使用同样的条纹，纵向贯通到目标区
+        const currentIndex = this.quarterWeeks.findIndex((item) => item.weekKey === getCurrentWeekKey());
+        if (currentIndex >= 0 && count > 0) {
+            const marker = this.goalEl.createDiv({ cls: 'plan-annual-goal-current' });
+            marker.style.left = `${(currentIndex / count) * 100}%`;
+            marker.style.width = `${(1 / count) * 100}%`;
+        }
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         // 已分配且落在当前季度内的目标，按周从左到右排序（同周按创建时间）
         const placed = (rootTask?.goals ?? [])
@@ -772,6 +791,7 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.laneEl.empty();
         const tasks = this.getTreeTasks();
         const categories = this.panelOptions.getCategories();
+        const currentWeekKey = getCurrentWeekKey();
         for (const task of tasks) {
             const row = this.laneEl.createDiv({ cls: 'plan-annual-lane-row' });
             row.dataset.taskId = task.id;
@@ -784,6 +804,8 @@ export class PlanAnnualPanel extends FloatingPanel {
                 const column = columnsEl.createDiv({ cls: 'plan-annual-lane-column' });
                 column.dataset.weekKey = item.weekKey;
                 column.dataset.index = String(index);
+                // 当前周列与表头使用同样的条纹背景，纵向贯通所有泳道行
+                column.toggleClass('is-current', item.weekKey === currentWeekKey);
                 column.addEventListener('pointerdown', (evt) => this.startCreateDrag(evt, task, row, item.weekKey));
             });
 
@@ -795,13 +817,24 @@ export class PlanAnnualPanel extends FloatingPanel {
             barEl.dataset.taskId = task.id;
             barEl.style.left = `${(bar.startIndex / this.quarterWeeks.length) * 100}%`;
             barEl.style.width = `${((bar.endIndex - bar.startIndex + 1) / this.quarterWeeks.length) * 100}%`;
-            barEl.style.background = color;
-            barEl.style.opacity = '0.75';
+            // 分类色作为基准色，具体填充方式由任务状态样式决定
+            barEl.style.setProperty('--plan-bar-color', color);
+            const status = task.status ?? 'notStarted';
+            barEl.toggleClass('is-in-progress', status === 'inProgress');
+            barEl.toggleClass('is-done', status === 'done');
+            barEl.toggleClass('is-paused', status === 'paused');
+            barEl.toggleClass('is-not-started', status === 'notStarted');
             barEl.title = this.formatWeekRange(bar.startWeekKey, bar.endWeekKey);
             barEl.addEventListener('click', (evt) => {
                 evt.stopPropagation();
                 this.selectTask(task.id);
                 this.selectBar(barEl);
+            });
+            // 右键：删除该任务的整条计划（全年排布全部移除）
+            barEl.addEventListener('contextmenu', (evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                this.removeTaskBar(task.id);
             });
             if (bar.clippedStart) {
                 setIcon(barEl.createSpan({ cls: 'plan-annual-bar-clip is-start' }), 'chevron-left');
@@ -919,11 +952,21 @@ export class PlanAnnualPanel extends FloatingPanel {
         return result;
     }
 
-    /** 指针位置对应的周键（不在任何周列上时返回 null） */
-    private weekKeyFromPoint(clientX: number, clientY: number): string | null {
-        const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-        const column = el?.closest('.plan-annual-lane-column') as HTMLElement | null;
-        return column?.dataset.weekKey ?? null;
+    /**
+     * 指针横坐标对应的周键（按拖拽行宽度百分比换算，不在周列范围内时返回 null）。
+     * 不用 elementFromPoint：拖拽手柄时指针始终在色块上，色块与周列层是兄弟节点，
+     * 命中元素里找不到周列，会导致同一行内拖动时周键不更新。
+     */
+    private weekKeyFromPoint(clientX: number): string | null {
+        const drag = this.drag;
+        if (!drag) return null;
+        const count = this.quarterWeeks.length;
+        if (count === 0) return null;
+        const rect = drag.rowEl.getBoundingClientRect();
+        if (rect.width <= 0) return null;
+        const index = Math.floor(((clientX - rect.left) / rect.width) * count);
+        if (index < 0 || index >= count) return null;
+        return this.quarterWeeks[index].weekKey;
     }
 
     /** 开始拖拽调整区间边缘 */
@@ -989,7 +1032,7 @@ export class PlanAnnualPanel extends FloatingPanel {
             drag.active = true;
             document.body.addClass('plan-annual-dragging');
         }
-        const weekKey = this.weekKeyFromPoint(evt.clientX, evt.clientY);
+        const weekKey = this.weekKeyFromPoint(evt.clientX);
         if (weekKey) drag.currentWeekKey = weekKey;
         this.renderDragPreview();
         this.placeDragTip(evt.clientX, evt.clientY);
@@ -1144,10 +1187,54 @@ export class PlanAnnualPanel extends FloatingPanel {
     }
 
     /**
-     * 写入排布：区间内所有周整周排布，该任务区间外的周全部移除（全年同步，只保留一个连续区间）。
+     * 写入排布：先写入被拖拽任务，再向上逐级扩展父任务，
+     * 保证每一级父任务的区间都覆盖子级的新区间（只扩不缩，父级无排布时直接取子级区间）。
      * 写入后统一保存并通知界面视图刷新。
      */
     private applyRange(taskId: string, startWeekKey: string, endWeekKey: string): void {
+        this.writeRange(taskId, startWeekKey, endWeekKey);
+        const repo = this.panelOptions.planAssignmentRepo;
+        const tasks = this.panelOptions.getTasks();
+        const newStart = this.weekTime(startWeekKey);
+        const newEnd = this.weekTime(endWeekKey);
+        let child: PrototypeTask | undefined = tasks.find((task) => task.id === taskId);
+        while (child && child.parentId) {
+            const parent = tasks.find((task) => task.id === child?.parentId);
+            if (!parent) break;
+            const keys = repo
+                .taskWeekAssignments(parent.id)
+                .map((assignment) => assignment.weekKey)
+                .sort((a, b) => this.weekTime(a) - this.weekTime(b));
+            if (keys.length === 0) {
+                // 父级原本没有排布：直接设为子级的新区间
+                this.writeRange(parent.id, startWeekKey, endWeekKey);
+            } else {
+                const parentStart = keys[0];
+                const parentEnd = keys[keys.length - 1];
+                const start = this.weekTime(parentStart) <= newStart ? parentStart : startWeekKey;
+                const end = this.weekTime(parentEnd) >= newEnd ? parentEnd : endWeekKey;
+                if (start !== parentStart || end !== parentEnd) this.writeRange(parent.id, start, end);
+            }
+            child = parent;
+        }
+        void this.panelOptions.save();
+        this.renderLanes();
+        this.panelOptions.onChanged?.();
+    }
+
+    /** 右键删除计划条：移除该任务的全年整周排布 */
+    private removeTaskBar(taskId: string): void {
+        const repo = this.panelOptions.planAssignmentRepo;
+        for (const assignment of repo.taskWeekAssignments(taskId)) {
+            repo.removeWeek(assignment.weekKey, taskId);
+        }
+        void this.panelOptions.save();
+        this.renderLanes();
+        this.panelOptions.onChanged?.();
+    }
+
+    /** 写入某任务的连续整周区间：区间内全部排布，区间外的排布全部移除（全年单区间） */
+    private writeRange(taskId: string, startWeekKey: string, endWeekKey: string): void {
         const repo = this.panelOptions.planAssignmentRepo;
         const rangeKeys = new Set<string>();
         let cursor = startWeekKey;
@@ -1160,8 +1247,5 @@ export class PlanAnnualPanel extends FloatingPanel {
             if (!rangeKeys.has(assignment.weekKey)) repo.removeWeek(assignment.weekKey, taskId);
         }
         for (const weekKey of Array.from(rangeKeys)) repo.addWeek(weekKey, taskId);
-        void this.panelOptions.save();
-        this.renderLanes();
-        this.panelOptions.onChanged?.();
     }
 }
