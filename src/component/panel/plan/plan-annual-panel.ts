@@ -1,7 +1,7 @@
 // 计划年度面板：左右结构。
-// 左侧：与计划面板一致（顶部根任务下拉 + 选中根任务的后代任务树 + 底部工具栏「信息」「目标」按钮，按钮暂为占位）。
+// 左侧：与习惯面板一致（顶部根任务下拉 + 选中根任务的后代任务树 + 底部工具栏「信息」「目标」按钮，按钮暂为占位）。
 // 右侧：季度泳道图。顶部为季度翻页行（← 2026年 Q2 →）与周列表头（W45 / 11/03），
-// 中间每个任务一行，行内用色块表示该任务整周排布的周区间（数据与计划面板共享 PlanAssignmentRepo）；
+// 中间每个任务一行，行内用色块表示该任务整周排布的周区间（数据与计划一周面板共享 PlanAssignmentRepo）；
 // 底部为固定高度的目标占位面板。
 // 排布：拖动色块左右手柄调整区间起止周，在行内空白周列拖拽新建区间；松手后同步该任务全年整周排布。
 import { setIcon } from 'obsidian';
@@ -30,7 +30,7 @@ export interface PlanAnnualPanelOptions extends Omit<FloatingPanelOptions, 'titl
     getTasks: () => PrototypeTask[];
     /** 分类数据源（色块使用分类颜色） */
     getCategories: () => PlanCategory[];
-    /** 计划排布数据仓库（与计划面板共享） */
+    /** 计划排布数据仓库（与计划一周面板共享） */
     planAssignmentRepo: PlanAssignmentRepo;
     /** 数据保存回调（排布写入后持久化） */
     save: () => Promise<void>;
@@ -40,7 +40,7 @@ export interface PlanAnnualPanelOptions extends Omit<FloatingPanelOptions, 'titl
     onOpenTaskDetail?: (taskId: string) => void;
 }
 
-/** 任务状态对应的图标（与计划面板任务树保持一致） */
+/** 任务状态对应的图标（与习惯面板任务树保持一致） */
 const STATUS_ICONS: Record<TaskStatus, string> = {
     notStarted: 'circle',
     inProgress: 'play',
@@ -809,6 +809,9 @@ export class PlanAnnualPanel extends FloatingPanel {
                 column.addEventListener('pointerdown', (evt) => this.startCreateDrag(evt, task, row, item.weekKey));
             });
 
+            // 子任务向上汇总线：所有后代任务排布的并集，仅视觉展示，不写入排布仓库
+            this.renderAggregateLines(row, task);
+
             // 色块层：该任务全年排布区间在当前季度内的部分
             const bar = this.buildLaneBar(task);
             if (!bar) continue;
@@ -862,6 +865,52 @@ export class PlanAnnualPanel extends FloatingPanel {
                 bar.startWeekKey,
             ));
         }
+    }
+
+    /**
+     * 绘制子任务向上汇总线：取所有后代任务真实排布的并集，
+     * 仅作视觉展示（不参与拖拽、右键删除与周计划排布）。
+     */
+    private renderAggregateLines(row: HTMLElement, task: PrototypeTask): void {
+        const segments = this.buildAggregateSegments(task);
+        for (const segment of segments) {
+            const line = row.createDiv({ cls: 'plan-annual-agg-line' });
+            line.style.left = `${(segment.startIndex / this.quarterWeeks.length) * 100}%`;
+            line.style.width = `${((segment.endIndex - segment.startIndex + 1) / this.quarterWeeks.length) * 100}%`;
+        }
+    }
+
+    /** 汇总线在当前季度内的分段（按周列下标，连续周合并为一段） */
+    private buildAggregateSegments(task: PrototypeTask): { startIndex: number; endIndex: number }[] {
+        const tasks = this.panelOptions.getTasks();
+        const descendantIds: string[] = [];
+        const collect = (parentId: string): void => {
+            for (const child of tasks.filter((item) => item.parentId === parentId)) {
+                descendantIds.push(child.id);
+                collect(child.id);
+            }
+        };
+        collect(task.id);
+        if (descendantIds.length === 0) return [];
+        const repo = this.panelOptions.planAssignmentRepo;
+        const descendantTimes: number[] = [];
+        for (const id of descendantIds) {
+            for (const assignment of repo.taskWeekAssignments(id)) {
+                descendantTimes.push(this.weekTime(assignment.weekKey));
+            }
+        }
+        if (descendantTimes.length === 0) return [];
+        const aggregateStart = Math.min(...descendantTimes);
+        const aggregateEnd = Math.max(...descendantTimes);
+        const segments: { startIndex: number; endIndex: number }[] = [];
+        this.quarterWeeks.forEach((item, index) => {
+            const time = this.weekTime(item.weekKey);
+            if (time < aggregateStart || time > aggregateEnd) return;
+            const last = segments[segments.length - 1];
+            if (last && last.endIndex === index - 1) last.endIndex = index;
+            else segments.push({ startIndex: index, endIndex: index });
+        });
+        return segments;
     }
 
     /** 选中色块（描边 + 手柄常驻） */
@@ -1187,36 +1236,11 @@ export class PlanAnnualPanel extends FloatingPanel {
     }
 
     /**
-     * 写入排布：先写入被拖拽任务，再向上逐级扩展父任务，
-     * 保证每一级父任务的区间都覆盖子级的新区间（只扩不缩，父级无排布时直接取子级区间）。
-     * 写入后统一保存并通知界面视图刷新。
+     * 写入排布：只写入被拖拽任务自身的区间。
+     * 父级不再自动写入真实排布，改由渲染时按后代任务求并集绘制汇总线（仅视觉展示）。
      */
     private applyRange(taskId: string, startWeekKey: string, endWeekKey: string): void {
         this.writeRange(taskId, startWeekKey, endWeekKey);
-        const repo = this.panelOptions.planAssignmentRepo;
-        const tasks = this.panelOptions.getTasks();
-        const newStart = this.weekTime(startWeekKey);
-        const newEnd = this.weekTime(endWeekKey);
-        let child: PrototypeTask | undefined = tasks.find((task) => task.id === taskId);
-        while (child && child.parentId) {
-            const parent = tasks.find((task) => task.id === child?.parentId);
-            if (!parent) break;
-            const keys = repo
-                .taskWeekAssignments(parent.id)
-                .map((assignment) => assignment.weekKey)
-                .sort((a, b) => this.weekTime(a) - this.weekTime(b));
-            if (keys.length === 0) {
-                // 父级原本没有排布：直接设为子级的新区间
-                this.writeRange(parent.id, startWeekKey, endWeekKey);
-            } else {
-                const parentStart = keys[0];
-                const parentEnd = keys[keys.length - 1];
-                const start = this.weekTime(parentStart) <= newStart ? parentStart : startWeekKey;
-                const end = this.weekTime(parentEnd) >= newEnd ? parentEnd : endWeekKey;
-                if (start !== parentStart || end !== parentEnd) this.writeRange(parent.id, start, end);
-            }
-            child = parent;
-        }
         void this.panelOptions.save();
         this.renderLanes();
         this.panelOptions.onChanged?.();

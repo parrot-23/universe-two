@@ -1,4 +1,4 @@
-// 计划排布领域仓库：管理界面视图「计划面板」周视图上任务到天列的排布数据。
+// 计划排布领域仓库：管理界面视图「计划一周面板」上任务到天列的排布数据。
 // 通过 baseRepo 拿到 planAssignmentData 引用，写操作后由调用方触发 baseRepo.saveAll()。
 import type { PlanAssignment, PlanAssignmentData, WeekAssignment } from '../datatypes/plan-assignment';
 import type { BaseRepo } from './base-repo';

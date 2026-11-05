@@ -73,6 +73,8 @@ export interface PrototypeTask {
     goals?: TaskGoalEntry[];
     /** 日目标（任务详情「一周目标」选项卡，键为日期 YYYY-MM-DD） */
     dayGoals?: Record<string, TaskDayGoalEntry[]>;
+    /** 本周目标（计划一周面板「本周描述」方框，键为周键，如 2026-W45） */
+    weekGoals?: Record<string, string>;
     /** 是否已归档（归档任务在界面中隐藏，数据仍保留） */
     archived?: boolean;
     /** 创建时间戳 */

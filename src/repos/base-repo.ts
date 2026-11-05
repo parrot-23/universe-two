@@ -43,7 +43,7 @@ export interface PluginData {
     prototypeTasks: PrototypeTask[];
     /** 时间盒数据（界面视图时间盒面板的格子涂色） */
     timeBoxData: TimeBoxData;
-    /** 计划排布数据（界面视图计划面板周视图的任务到天列排布） */
+    /** 计划排布数据（界面视图计划一周面板的任务到天列排布） */
     planAssignmentData: PlanAssignmentData;
     /** 界面视图卡片布局（编辑模式下被移除的卡片） */
     interfaceLayoutData: InterfaceLayoutData;
@@ -355,6 +355,7 @@ function parsePrototypeTasks(raw: unknown): PrototypeTask[] {
             ...(r.fileTimestamp === true ? { fileTimestamp: true } : {}),
             ...(parseTaskGoals(r.goals) ? { goals: parseTaskGoals(r.goals)! } : {}),
             ...(parseTaskDayGoals(r.dayGoals) ? { dayGoals: parseTaskDayGoals(r.dayGoals)! } : {}),
+            ...(parseTaskWeekGoals(r.weekGoals) ? { weekGoals: parseTaskWeekGoals(r.weekGoals)! } : {}),
             ...(r.archived === true ? { archived: true } : {}),
             createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
         });
@@ -404,6 +405,18 @@ function parseTaskDayGoals(raw: unknown): Record<string, TaskDayGoalEntry[]> | n
             });
         }
         if (entries.length > 0) result[dayKey] = entries;
+    }
+    return Object.keys(result).length > 0 ? result : null;
+}
+
+/** 解析本周目标（键为周键 YYYY-Www；无有效条目时返回 null） */
+function parseTaskWeekGoals(raw: unknown): Record<string, string> | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const result: Record<string, string> = {};
+    for (const [weekKey, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (!/^\d{4}-W\d{2}$/.test(weekKey) || typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (trimmed) result[weekKey] = trimmed;
     }
     return Object.keys(result).length > 0 ? result : null;
 }

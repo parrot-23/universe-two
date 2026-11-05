@@ -9545,7 +9545,7 @@ button.swimlane-section-card-settings {
     height: 13px;
 }
 
-/* 计划面板任务条目末尾的状态图标（与任务信息面板的状态图标一致） */
+/* 习惯面板 / 计划年度面板任务条目末尾的状态图标 */
 .plan-tree-status-icon {
     display: inline-flex;
     align-items: center;
@@ -10605,12 +10605,12 @@ button.task-record-dropdown-item.is-selected {
     padding-top: 4px;
 }
 
-/* ======================== 计划面板（panel/plan-panel） ======================== */
-.floating-panel-body.plan-panel {
+/* ======================== 习惯面板（panel/habit-panel） ======================== */
+.floating-panel-body.habit-panel-body {
     display: flex;
     flex-direction: row;
     gap: 14px;
-    /* 固定高度：信息面板开关不会改变面板总高，超出部分由日历内部滚动 */
+    /* 固定高度：底部习惯设置面板显隐不会改变面板总高，超出部分由日历内部滚动 */
     flex: 0 0 auto;
     height: 60vh;
     min-height: 300px;
@@ -11185,7 +11185,7 @@ button.task-record-dropdown-item.is-selected {
 }
 
 /* 左侧：根任务下拉 + 任务树 */
-.plan-left {
+.habit-left {
     width: 240px;
     flex-shrink: 0;
     display: flex;
@@ -11196,31 +11196,17 @@ button.task-record-dropdown-item.is-selected {
     border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
 }
 
-.plan-root-select {
+.habit-root-select {
     width: 100%;
 }
 
-.plan-tree {
+.habit-tree {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
 }
 
-/* 左侧底部工具栏：任务信息开关 */
-.plan-left-toolbar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding-top: 8px;
-    border-top: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-}
-
-/* 日期切换行右侧的视图开关（年视图「目标」/ 周视图「习惯」） */
-.plan-nav-toggle {
-    margin-left: 4px;
-}
-
+/* 左侧底部工具栏按钮（计划年度面板使用） */
 .plan-toolbar-btn {
     display: flex;
     align-items: center;
@@ -11254,8 +11240,8 @@ button.task-record-dropdown-item.is-selected {
     height: 14px;
 }
 
-/* 右侧底部：任务信息面板（第一行任务名 / 圆点 / 分类，第二行任务状态） */
-.plan-info-panel {
+/* 右侧底部：习惯设置面板（第一行任务名 / 圆点 / 分类，下方为习惯开关与配置） */
+.habit-panel {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -11266,7 +11252,7 @@ button.task-record-dropdown-item.is-selected {
     background: var(--sdt-card-bg, var(--background-secondary));
 }
 
-.plan-info-panel.is-hidden {
+.habit-panel.is-hidden {
     display: none;
 }
 
@@ -11304,48 +11290,8 @@ button.task-record-dropdown-item.is-selected {
     font-size: 11px;
 }
 
-.plan-info-status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-}
-
-.plan-info-status-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 10px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--sdt-text-secondary, var(--text-muted));
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.plan-info-status-btn:hover {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
-.plan-info-status-btn.is-active {
-    border-color: var(--interactive-accent);
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-    color: var(--sdt-text-primary, var(--text-normal));
-}
-
-.plan-info-status-icon {
-    display: inline-flex;
-    align-items: center;
-}
-
-.plan-info-status-icon svg {
-    width: 13px;
-    height: 13px;
-}
-
 /* 习惯设置面板：开关行 + 时间 / 星期配置 */
-.plan-habit-enable {
+.habit-enable {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -11353,53 +11299,53 @@ button.task-record-dropdown-item.is-selected {
     color: var(--sdt-text-secondary, var(--text-muted));
 }
 
-.plan-habit-enable .checkbox-container {
+.habit-enable .checkbox-container {
     flex-shrink: 0;
 }
 
-.plan-habit-enable-icon {
+.habit-enable-icon {
     display: inline-flex;
     align-items: center;
 }
 
-.plan-habit-enable-icon svg {
+.habit-enable-icon svg {
     width: 13px;
     height: 13px;
 }
 
-.plan-habit-config {
+.habit-config {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.plan-habit-config.is-disabled {
+.habit-config.is-disabled {
     opacity: 0.5;
 }
 
-.plan-habit-time-row {
+.habit-time-row {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.plan-habit-time-label {
+.habit-time-label {
     font-size: 12px;
     color: var(--sdt-text-secondary, var(--text-muted));
 }
 
-.plan-habit-time {
+.habit-time {
     width: 110px;
     font-size: 12px;
 }
 
-.plan-habit-days {
+.habit-days {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
 }
 
-.plan-habit-day {
+.habit-day {
     padding: 3px 8px;
     border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
     border-radius: 4px;
@@ -11409,22 +11355,22 @@ button.task-record-dropdown-item.is-selected {
     cursor: pointer;
 }
 
-.plan-habit-day:hover:not(:disabled) {
+.habit-day:hover:not(:disabled) {
     background: var(--sdt-hover-bg, var(--background-modifier-hover));
 }
 
-.plan-habit-day.is-active {
+.habit-day.is-active {
     border-color: var(--interactive-accent);
     background: var(--sdt-hover-bg, var(--background-modifier-hover));
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
-.plan-habit-day:disabled {
+.habit-day:disabled {
     cursor: default;
 }
 
 /* 右侧：年 / 周选项卡 + 内容 */
-.plan-right {
+.habit-right {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -11565,209 +11511,6 @@ button.task-record-dropdown-item.is-selected {
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
-/* 年视图：52 周（7 列），行高随该行卡片数量撑开，整块网格超高时滚动 */
-.plan-year-grid {
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    grid-auto-rows: auto;
-    gap: 6px;
-    overflow-y: auto;
-}
-
-/* 与周历面板的日期格子保持一致的方块样式 */
-.plan-year-cell {
-    position: relative;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    padding: 4px 6px;
-    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-    border-radius: 4px;
-    background: var(--sdt-card-bg, var(--background-secondary));
-    font-size: 12px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-    overflow: hidden;
-}
-
-.plan-year-cell-label {
-    align-self: flex-end;
-    flex: 0 0 auto;
-}
-
-/* 该周跨入新月份：左上角月份标注 */
-.plan-year-cell-month {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-accent);
-}
-
-.plan-year-cell.is-assignable {
-    cursor: pointer;
-}
-
-.plan-year-cell.is-assignable:hover {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
-.plan-year-cell.is-selected {
-    outline: 2px solid var(--interactive-accent);
-    outline-offset: -2px;
-}
-
-.plan-year-cell-tasks {
-    /* 卡片按自身高度排列，行高由该行卡片最多的格子撑开 */
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 0 0 auto;
-}
-
-.plan-year-cell-task {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: var(--sdt-control-bg, var(--background-primary));
-    color: var(--sdt-text-primary, var(--text-normal));
-    font-size: 10px;
-    line-height: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    cursor: pointer;
-}
-
-/* 任务名称：占满剩余宽度并省略，保证末尾的 × 始终可见 */
-.plan-year-cell-task-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.plan-year-cell-task:hover {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
-/* 信息面板激活时，与下方展示的任务 / 周对应的事件卡片高亮边框 */
-.plan-year-cell-task.is-highlighted {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-    box-shadow: inset 0 0 0 1px var(--interactive-accent);
-}
-
-.plan-year-cell-task-del {
-    flex: 0 0 auto;
-    visibility: hidden;
-    color: var(--sdt-text-secondary, var(--text-muted));
-}
-
-.plan-year-cell-task:hover .plan-year-cell-task-del {
-    visibility: visible;
-}
-
-.plan-year-cell-task-del:hover {
-    color: var(--text-error);
-}
-
-/* 当前周：金色边框高亮 */
-.plan-year-cell.is-current {
-    border: 2px solid #d4af37;
-    color: var(--sdt-text-primary, var(--text-normal));
-    font-weight: 600;
-}
-
-/* 年视图：选中周格子后贴在格子右侧的任务信息浮层 */
-.plan-week-popover {
-    position: fixed;
-    z-index: 1100;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 140px;
-    max-width: 260px;
-    max-height: 240px;
-    overflow-y: auto;
-    padding: 8px;
-    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-    border-radius: 8px;
-    background: var(--sdt-control-bg, var(--background-primary));
-    color: var(--sdt-text-primary, var(--text-normal));
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.plan-week-popover-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.plan-week-popover-task {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.plan-week-popover-dot {
-    flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.plan-week-popover-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.plan-week-popover-goal {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding-left: 14px;
-    font-size: 11px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-}
-
-.plan-week-popover-goal-icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
-.plan-week-popover-goal-icon .svg-icon {
-    width: 12px;
-    height: 12px;
-}
-
-.plan-week-popover-goal-owner {
-    flex: 0 0 auto;
-    max-width: 45%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.plan-week-popover-goal-owner::after {
-    content: ' · ';
-}
-
-.plan-week-popover-goal-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* 周视图：与周计划视图一致的 7 列日历（表头 + 连通的表体列） */
 .plan-week-grid {
     flex: 1;
@@ -11809,112 +11552,6 @@ button.task-record-dropdown-item.is-selected {
     border-right: none;
 }
 
-/* 导航行（与「习惯」同一行）末尾的「周任务 已排/总数」按钮：靠右对齐 */
-.plan-week-task-toggle {
-    flex: 0 0 auto;
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-    background: var(--sdt-interactive-bg, var(--interactive-normal));
-    color: var(--sdt-text-secondary, var(--text-muted));
-    font-size: 12px;
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-.plan-week-task-toggle:hover {
-    background: var(--sdt-interactive-hover, var(--interactive-hover));
-}
-
-.plan-week-task-toggle.is-active {
-    border-color: var(--interactive-accent);
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-    color: var(--sdt-text-primary, var(--text-normal));
-}
-
-/* 本周任务未全部排布到天：图标显示为警告色 */
-.plan-week-task-toggle .plan-toolbar-btn-icon.is-warning {
-    color: var(--text-warning, var(--color-orange));
-}
-
-/* 周任务面板：挂在 body 上，用 fixed 定位，坐标由 JS 按按钮位置计算（left / top 内联样式）。
-   不放在 .plan-pane 内，避免被其 overflow: hidden 裁掉 */
-.plan-week-task-panel {
-    position: fixed;
-    z-index: 1100;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 160px;
-    max-width: 260px;
-    max-height: 280px;
-    overflow-y: auto;
-    padding: 6px;
-    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-    border-radius: 8px;
-    background: var(--sdt-control-bg, var(--background-primary));
-    color: var(--sdt-text-primary, var(--text-normal));
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.plan-week-task-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 6px;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.plan-week-task-item:hover {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
-.plan-week-task-item.is-selected {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-    color: var(--text-accent);
-    font-weight: 600;
-}
-
-.plan-week-task-dot {
-    flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.plan-week-task-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* 已排布到本周某一天：末尾标识图标 */
-.plan-week-task-scheduled {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-accent);
-}
-
-.plan-week-task-scheduled .svg-icon {
-    width: 12px;
-    height: 12px;
-}
-
-.plan-week-task-empty {
-    padding: 6px;
-    font-size: 12px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-}
-
 .plan-week-header-name {
     font-size: 13px;
     font-weight: bold;
@@ -11949,15 +11586,6 @@ button.task-record-dropdown-item.is-selected {
     border-right: none;
 }
 
-/* 已选中任务时：列可点击排布，悬停给出反馈 */
-.plan-week-column.is-assignable {
-    cursor: pointer;
-}
-
-.plan-week-column.is-assignable:hover {
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
 /* 列内已排布的任务小卡片 */
 .plan-week-task-chip {
     position: relative;
@@ -11975,62 +11603,11 @@ button.task-record-dropdown-item.is-selected {
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
-/* 跨列合并的任务卡片：第一行灰色父层级，第二行任务名 */
-.plan-week-span-chip {
-    align-self: start;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1px;
-    margin: 4px 2px;
-}
-
-.plan-week-task-chip-path {
-    min-width: 0;
-    min-height: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-faint);
-    font-size: 10px;
-}
-
 .plan-week-task-chip-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-/* 右上角删除按钮：默认隐藏，悬浮卡片时显示 */
-.plan-week-task-chip-del {
-    position: absolute;
-    top: 1px;
-    right: 2px;
-    padding: 0 2px;
-    line-height: 1;
-    font-size: 14px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-
-.plan-week-task-chip:hover .plan-week-task-chip-del {
-    opacity: 1;
-}
-
-.plan-week-task-chip-del:hover {
-    color: var(--text-error);
-}
-
-/* 跨列卡片：每列各有一个 ×，仅在鼠标所在列显示 */
-.plan-week-span-chip .plan-week-span-del,
-.plan-week-span-chip:hover .plan-week-span-del {
-    opacity: 0;
-}
-
-.plan-week-span-chip .plan-week-span-del.is-visible {
-    opacity: 1;
 }
 
 /* 习惯模式：周日历里的习惯卡片（时间 + 任务名，无删除按钮；连续星期跨列合并） */
@@ -12122,7 +11699,7 @@ button.task-record-dropdown-item.is-selected {
     white-space: nowrap;
 }
 
-/* 七列排布网格（排布一周模式）：与计划面板周视图共用内部样式 */
+/* 七列排布网格（排布一周模式）：与习惯面板周视图共用内部样式 */
 .plan-week-day-grid {
     flex: 1;
     min-height: 0;
@@ -12372,9 +11949,24 @@ button.task-record-dropdown-item.is-selected {
     border-radius: 4px;
     background: var(--sdt-control-bg, var(--background-primary));
     color: var(--sdt-text-primary, var(--text-normal));
+    caret-color: var(--sdt-text-primary, var(--text-normal));
+    cursor: text;
     font-size: 12px;
     line-height: 1.5;
     box-sizing: border-box;
+}
+
+/* 聚焦时保持与未聚焦一致的边框，不再出现边框 / 轮廓变化 */
+.floating-panel-body.plan-week-panel .plan-week-desc-input:focus {
+    outline: none;
+    border-color: var(--sdt-card-border, var(--background-modifier-border));
+    box-shadow: none;
+}
+
+/* 未选中任务时禁用本周目标输入框 */
+.plan-week-desc-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* 近 14 天执行时长柱形图：选中任务后每天一根柱，柱高按时长占最大值的比例 */
@@ -12913,6 +12505,38 @@ button.task-record-dropdown-item.is-selected {
     display: flex;
 }
 
+/* 子任务向上汇总线：中性灰细实线，仅视觉展示，不参与拖拽与右键删除 */
+.plan-annual-agg-line {
+    position: absolute;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    background: var(--sdt-text-secondary, var(--text-muted));
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* 汇总线两端圆点：分别落在起点与终点上 */
+.plan-annual-agg-line::before,
+.plan-annual-agg-line::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sdt-text-secondary, var(--text-muted));
+    transform: translateY(-50%);
+}
+
+.plan-annual-agg-line::before {
+    left: -3px;
+}
+
+.plan-annual-agg-line::after {
+    right: -3px;
+}
+
 /* 拖拽预览色块：半透明虚线 */
 .plan-annual-bar-preview {
     position: absolute;
@@ -13188,7 +12812,7 @@ body.plan-annual-dragging {
     background: var(--sdt-interactive-hover, var(--background-modifier-hover));
 }
 
-/* 操作按钮隐藏态（如计划面板未选中任务时的跳转按钮） */
+/* 操作按钮隐藏态（如习惯面板未选中任务时的跳转按钮） */
 .floating-panel-action.is-hidden {
     display: none;
 }

@@ -435,7 +435,7 @@ export class TaskDetailPanel extends FloatingPanel {
         this.settingPanelEl.toggleClass('is-hidden', !visible);
         if (!visible) return;
 
-        // 第一行：颜色圆点 + 任务名称 + 分类（与计划面板任务信息一致）
+        // 第一行：颜色圆点 + 任务名称 + 分类（与习惯面板任务信息一致）
         const task = this.tasks.find((item) => item.id === this.selectedTaskId) ?? this.task;
         const head = this.settingPanelEl.createDiv({ cls: 'plan-info-head' });
         const category = this.panelOptions.categoryData?.categories

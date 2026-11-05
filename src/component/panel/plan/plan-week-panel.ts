@@ -1,8 +1,8 @@
 // 计划一周面板：左右结构。
 // 左侧：周信息摘要（周数 / 日期范围 / 任务数）+ 本周已整周排布的任务列表，
-//       点击任务条目选中它，作为右侧日目标的绑定任务（再次点击取消选中）。
+//       点击任务条目选中它，作为右侧本周目标与日目标的绑定任务（再次点击取消选中）。
 // 右侧：顶部周切换（上一周 / 周数 + 日期范围 / 下一周），
-//       下方左侧方框为本周具体描述（多行文本域，失焦保存，按周键独立存储），
+//       下方左侧方框为本周目标（多行文本域，失焦保存，按选中任务 + 周键独立存储），
 //       下方右侧为周一到周日 7 个方框，编辑选中任务在该周的日目标
 //       （数据与任务详情「一周目标」选项卡共享 task.dayGoals）。
 import { setIcon } from 'obsidian';
@@ -41,7 +41,7 @@ export interface PlanWeekPanelOptions extends Omit<FloatingPanelOptions, 'title'
     onChanged?: () => void;
 }
 
-/** 任务状态对应的图标（与计划面板任务树保持一致） */
+/** 任务状态对应的图标（与习惯面板任务树保持一致） */
 const STATUS_ICONS: Record<TaskStatus, string> = {
     notStarted: 'circle',
     inProgress: 'play',
@@ -139,7 +139,7 @@ export class PlanWeekPanel extends FloatingPanel {
         // 每日具体目标：与任务详情「一周目标」样式一致
         this.dayListEl = content.createDiv({ cls: 'plan-week-days' });
 
-        // 七列网格（排布一周模式）：选中左侧任务后点击某天排布，与计划面板周视图一致
+        // 七列网格（排布一周模式）：选中左侧任务后点击某天排布，与习惯面板周视图的网格样式一致
         this.dayGridEl = right.createDiv({ cls: 'plan-week-day-grid' });
 
         this.syncMode();
@@ -253,6 +253,7 @@ export class PlanWeekPanel extends FloatingPanel {
             row.addEventListener('click', () => {
                 this.selectedTaskId = this.selectedTaskId === task.id ? undefined : task.id;
                 this.renderTasks();
+                this.renderDescription();
                 this.renderDays();
                 this.renderDayGrid();
             });
@@ -503,17 +504,48 @@ export class PlanWeekPanel extends FloatingPanel {
         return result;
     }
 
-    /** 本周描述：读取当前周已保存的文本 */
+    /** 本周目标：按当前选中任务与当前周读取；未选中任务时禁用并提示先选择任务 */
     private renderDescription(): void {
-        this.descEl.value = this.panelOptions.planAssignmentRepo.weekNote(this.weekKey);
+        const task = this.selectedTask();
+        this.descEl.disabled = !task;
+        this.descEl.toggleClass('is-disabled', !task);
+        if (!task) {
+            this.descEl.value = '';
+            this.descEl.placeholder = t('panel.planWeekNoTask');
+            return;
+        }
+        this.descEl.placeholder = t('panel.planWeekDescriptionPlaceholder');
+        this.migrateLegacyWeekNote(task);
+        this.descEl.value = task.weekGoals?.[this.weekKey] ?? '';
     }
 
-    /** 保存本周描述（内容未变化时不写入） */
+    /** 保存本周目标到选中任务的 weekGoals（未选中任务或内容未变化时不写入） */
     private saveDescription(): void {
-        const repo = this.panelOptions.planAssignmentRepo;
+        const task = this.selectedTask();
+        if (!task) return;
         const next = this.descEl.value.trim();
-        if (next === repo.weekNote(this.weekKey)) return;
-        repo.setWeekNote(this.weekKey, next);
+        if (next === (task.weekGoals?.[this.weekKey] ?? '')) return;
+        const goals = { ...(task.weekGoals ?? {}) };
+        if (next) goals[this.weekKey] = next;
+        else delete goals[this.weekKey];
+        if (Object.keys(goals).length > 0) task.weekGoals = goals;
+        else delete task.weekGoals;
+        void this.panelOptions.save();
+        this.panelOptions.onChanged?.();
+    }
+
+    /**
+     * 旧数据迁移：该周此前按周保存的「本周描述」，
+     * 在首次选中任务时转入该任务的本周目标，随后清除旧的周级描述。
+     */
+    private migrateLegacyWeekNote(task: PrototypeTask): void {
+        const repo = this.panelOptions.planAssignmentRepo;
+        const legacy = repo.weekNote(this.weekKey);
+        if (!legacy) return;
+        if (!task.weekGoals?.[this.weekKey]) {
+            task.weekGoals = { ...(task.weekGoals ?? {}), [this.weekKey]: legacy };
+        }
+        repo.setWeekNote(this.weekKey, '');
         void this.panelOptions.save();
         this.panelOptions.onChanged?.();
     }

@@ -187,7 +187,7 @@ export class TaskPickerPanel extends FloatingPanel {
         }
     }
 
-    /** 创建一条任务行（与计划面板左侧任务树同一套样式） */
+    /** 创建一条任务行（与习惯面板左侧任务树同一套样式） */
     private createTaskRow(parentEl: HTMLElement, task: PrototypeTask, label?: string): HTMLElement {
         const row = parentEl.createDiv({ cls: 'task-detail-tree-row' });
         row.dataset.taskId = task.id;
