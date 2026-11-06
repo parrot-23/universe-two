@@ -74,8 +74,8 @@ export class TaskDetailPanel extends FloatingPanel {
     private sectionsEl!: HTMLElement;
     /** 顶部选项卡 */
     private tabs: HTMLElement[] = [];
-    /** 当前选中的任务 id（决定 + 按钮在哪个任务下新增子任务），默认根任务 */
-    private selectedTaskId: string;
+    /** 当前选中的任务 id（决定 + 按钮在哪个任务下新增子任务），默认根任务；取消选中时为 undefined */
+    private selectedTaskId: string | undefined;
     /** 清单内容容器 */
     private checklistBodyEl: HTMLElement | null = null;
     /** 清单选项卡的未完成数量标签 */
@@ -248,7 +248,10 @@ export class TaskDetailPanel extends FloatingPanel {
             }
             const row = (evt.target as HTMLElement).closest('.task-detail-tree-row') as HTMLElement | null;
             const taskId = row?.dataset.taskId;
-            if (taskId) this.selectTask(taskId);
+            if (!taskId) return;
+            // 再次点击已选中的条目取消选中
+            if (taskId === this.selectedTaskId) this.clearTaskSelection();
+            else this.selectTask(taskId);
         });
         this.refreshRootSelect();
         this.renderTree();
@@ -1338,6 +1341,25 @@ export class TaskDetailPanel extends FloatingPanel {
         this.renderSettingPanel();
     }
 
+    /** 取消任务条目选中：清除高亮，右侧回到任务树根任务（面板打开时的任务） */
+    private clearTaskSelection(): void {
+        this.selectedTaskId = undefined;
+        this.treeEl.querySelectorAll('.task-detail-tree-row').forEach((el) => {
+            (el as HTMLElement).removeClass('is-selected');
+        });
+        const rootTask = this.tasks.find((item) => item.id === this.rootTaskId);
+        if (rootTask && rootTask.id !== this.task.id) {
+            // 右侧切回根任务，未提交的内联编辑先行放弃
+            this.activeInlineEditAbort?.();
+            this.task = rootTask;
+            this.selectedChecklistId = null;
+            this.fileCreateMode = false;
+            this.renderRightPane();
+            return;
+        }
+        this.renderSettingPanel();
+    }
+
     /** 展开 / 收起新增子任务小面板 */
     private toggleAddForm(): void {
         const visible = this.addFormEl.style.display !== 'none';
@@ -1361,7 +1383,7 @@ export class TaskDetailPanel extends FloatingPanel {
             this.inputEl.focus();
             return;
         }
-        this.panelOptions.onAddChild?.(name, this.selectedTaskId);
+        this.panelOptions.onAddChild?.(name, this.selectedTaskId ?? this.rootTaskId);
         this.hideAddForm();
     }
 }

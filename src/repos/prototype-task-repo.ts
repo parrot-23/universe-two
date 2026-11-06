@@ -20,6 +20,13 @@ export class PrototypeTaskRepo {
         return this.baseRepo.data!.prototypeTasks;
     }
 
+    /** 已归档的根任务（归档列表展示用，按创建时间从新到旧） */
+    get archivedRootTasks(): PrototypeTask[] {
+        return this.allTasks
+            .filter((task) => task.archived === true && !task.parentId)
+            .sort((a, b) => b.createdAt - a.createdAt);
+    }
+
     /** 新增原型任务（parentId 存在时作为该任务的子任务） */
     add(name: string, type: PrototypeTaskType, parentId?: string): PrototypeTask {
         const task: PrototypeTask = {
@@ -37,6 +44,12 @@ export class PrototypeTaskRepo {
     archive(taskId: string): void {
         const task = this.allTasks.find((item) => item.id === taskId);
         if (task) task.archived = true;
+    }
+
+    /** 移出归档：恢复任务到正常任务列表 */
+    unarchive(taskId: string): void {
+        const task = this.allTasks.find((item) => item.id === taskId);
+        if (task) task.archived = undefined;
     }
 
     /** 删除任务：仅删除当前任务，其子任务提升为根任务 */

@@ -6,7 +6,7 @@
 // 3. 内容变化用 DOM input 事件监听，写回文件带防抖；
 // 4. 全程不创建 leaf、不开标签页、不激活 workspace，因此不会闪烁；
 // 5. 光标由 JS 手动绘制（CM6 的 cursorLayer 在该场景下不生成 .cm-cursor）。
-import { Component, Notice } from 'obsidian';
+import { Component, Notice, setIcon } from 'obsidian';
 import type { App, TFile } from 'obsidian';
 
 import { t } from '../../../i18n';
@@ -27,8 +27,9 @@ interface CodeMirrorLike {
     requestMeasure?: () => void;
     focus?: () => void;
     contentDOM?: HTMLElement;
+    scrollDOM?: HTMLElement;
     state?: { doc?: { length?: number; toString: () => string } };
-    dispatch?: (spec: { selection: { anchor: number; head: number } }) => void;
+    dispatch?: (spec: { selection: { anchor: number; head: number }; scrollIntoView?: boolean }) => void;
 }
 
 /** 内部 Markdown 编辑器实例（ScrollableMarkdownEditor）的最小结构 */
@@ -132,6 +133,37 @@ export class FileEditorPanel extends FloatingPanel {
         this.setStatus(t('panel.fileSaved'));
 
         this.hostEl = this.body.createDiv({ cls: 'file-editor-panel-host' });
+
+        // 右下角悬浮按钮：半透明向下箭头，点击定位到文字末尾
+        const toEndBtn = this.body.createDiv({ cls: 'file-editor-panel-to-end' });
+        setIcon(toEndBtn, 'chevron-down');
+        toEndBtn.addEventListener('click', () => this.scrollToEnd());
+    }
+
+    /** 定位到文字末尾：光标移到文档结尾并滚动到底（编辑器未就绪时忽略） */
+    private scrollToEnd(): void {
+        const editor = this.editor;
+        if (!editor) return;
+        const cm = this.codeMirrorOf(editor);
+        const length = cm?.state?.doc?.length ?? 0;
+        try {
+            cm?.dispatch?.({ selection: { anchor: length, head: length }, scrollIntoView: true });
+        } catch {
+            // CodeMirror 未就绪时忽略
+        }
+        // 兜底：部分版本 scrollIntoView 不生效，直接把滚动容器拉到底
+        try {
+            if (cm?.scrollDOM) cm.scrollDOM.scrollTop = cm.scrollDOM.scrollHeight;
+        } catch {
+            // 忽略
+        }
+        try {
+            cm?.requestMeasure?.();
+            cm?.focus?.();
+        } catch {
+            // 忽略
+        }
+        this.schedulePaintCaret(editor);
     }
 
     /** 取编辑器原型 → 在面板内 new 一个编辑器 → mock owner → 绑定内容写回 */

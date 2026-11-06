@@ -11,6 +11,7 @@ const CARD_ITEMS: { id: string; icon: string; labelKey: Parameters<typeof t>[0] 
     { id: 'nav', icon: 'panel-right', labelKey: 'interface.cardNav' },
     { id: 'today-clock', icon: 'clock', labelKey: 'interface.cardTodayClock' },
     { id: 'today-tasks', icon: 'list-checks', labelKey: 'interface.cardTodayTasks' },
+    { id: 'today-tasks-simple', icon: 'layout-list', labelKey: 'interface.cardTodayTasksSimple' },
     { id: 'clock', icon: 'clock-4', labelKey: 'interface.cardClock' },
 ];
 

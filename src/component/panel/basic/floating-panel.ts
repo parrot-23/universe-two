@@ -24,6 +24,11 @@ export interface FloatingPanelOptions {
     /** 标题栏是否显示钉住按钮（钉住后点击面板外不再关闭），默认 false */
     pinnable?: boolean;
     /**
+     * 标题栏帮助文案：提供后在关闭按钮左侧显示（?）按钮（默认不显示），
+     * 鼠标悬停时在按钮下方弹出提示气泡，移开即关闭。
+     */
+    helpText?: string;
+    /**
      * 固定层级：设置后该面板不参与置顶递增，始终使用此 z-index。
      * 用于需要压在 Obsidian 原生浮层（右键菜单等）之下的面板（如文件编辑面板）。
      */
@@ -133,6 +138,17 @@ export class FloatingPanel {
         // 钉住按钮：默认不启用，由 pinnable 开启
         if (options.pinnable) {
             this.pinButtonEl = this.addHeaderAction('pin', t('panel.pin'), () => this.togglePin());
+        }
+
+        // 帮助按钮：默认不显示，传入 helpText 时在关闭按钮左侧出现，悬停弹出提示气泡
+        if (options.helpText) {
+            const helpEl = rightEl.createDiv({ cls: 'floating-panel-help' });
+            // 不设置 aria-label / title：Obsidian 会据此在悬浮时弹出原生提示，挡住自定义帮助气泡
+            const helpBtn = helpEl.createDiv({ cls: 'floating-panel-action' });
+            setIcon(helpBtn, 'help-circle');
+            const helpTip = helpEl.createDiv({ cls: 'floating-panel-help-tip', text: options.helpText });
+            helpBtn.addEventListener('mouseenter', () => helpTip.addClass('is-visible'));
+            helpBtn.addEventListener('mouseleave', () => helpTip.removeClass('is-visible'));
         }
 
         const closeBtn = rightEl.createDiv({ cls: 'floating-panel-close', attr: { 'aria-label': 'Close' } });

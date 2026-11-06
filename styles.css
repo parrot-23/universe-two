@@ -7069,6 +7069,107 @@ button.swimlane-section-card-settings {
     min-height: 0;
 }
 
+/* 今日任务（简洁版）卡片外壳：300×自适应，默认右上（今日时钟右侧空白区） */
+.card-today-tasks-simple {
+    left: calc(50% + 10px);
+    top: 70%;
+    width: 300px;
+    height: auto;
+    max-height: calc(100% - 24px);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.card-today-tasks-simple > .interface-card-shell-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+}
+
+.card-today-tasks-simple .interface-today-tasks-card {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+}
+
+/* 简洁版无顶部日期区：内容区不再需要顶部分隔线 */
+.card-today-tasks-simple .interface-today-tasks-body {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+/* 简洁版顶部标题行：今日任务 + 右侧（所有任务）与（+）图标 */
+.interface-today-tasks-simple-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--tts-fs) * 0.25);
+    padding: calc(var(--tts-fs) * 0.25) 0 calc(var(--tts-fs) * 0.375);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.interface-today-tasks-simple-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: calc(var(--tts-fs) * 0.875);
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-today-tasks-simple-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: calc(var(--tts-fs) * 0.125);
+}
+
+.interface-today-tasks-simple-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--tts-fs) * 1.5);
+    height: calc(var(--tts-fs) * 1.5);
+    padding: 0;
+    border: none;
+    border-radius: calc(var(--tts-fs) * 0.25);
+    background: transparent;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.interface-today-tasks-simple-icon-btn:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-today-tasks-simple-icon-btn.is-active {
+    background: var(--background-modifier-hover);
+    color: var(--text-accent);
+}
+
+.interface-today-tasks-simple-icon-btn svg {
+    width: 0.9em;
+    height: 0.9em;
+}
+
+/* 额外任务行末尾的「额外」标签 */
+.interface-today-tasks-item-extra {
+    flex: 0 0 auto;
+    padding: 0 calc(var(--tts-fs) * 0.25);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: calc(var(--tts-fs) * 0.625);
+    font-size: calc(var(--tts-fs) * 0.625);
+    line-height: 1.4;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
 /* 时钟卡片外壳：220×220，默认左下（日期卡片下方） */
 .card-clock {
     left: 0;
@@ -8418,18 +8519,36 @@ button.swimlane-section-card-settings {
     font-weight: 600;
 }
 
-/* 内容方框：本周任务 + 任务绑定的目标（纯展示） */
+/* 内容区：左侧本日目标 + 右侧本周任务（纯展示） */
+.week-calendar-boxes {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 .week-calendar-task-box {
     display: flex;
     flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
     gap: 6px;
-    margin-top: 10px;
     padding: 8px 10px;
     max-height: 220px;
     overflow-y: auto;
     border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
     border-radius: 6px;
     background: var(--sdt-card-bg, var(--background-secondary));
+}
+
+/* 本日目标：较窄的左栏 */
+.week-calendar-daygoal-box {
+    flex: 0 0 42%;
+}
+
+.week-calendar-day-goal.is-done .week-calendar-task-goal-text {
+    color: var(--sdt-text-secondary, var(--text-muted));
+    text-decoration: line-through;
 }
 
 .week-calendar-task-box-title {
@@ -8486,18 +8605,6 @@ button.swimlane-section-card-settings {
 .week-calendar-task-goal-icon .svg-icon {
     width: 12px;
     height: 12px;
-}
-
-.week-calendar-task-goal-owner {
-    flex: 0 0 auto;
-    max-width: 45%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.week-calendar-task-goal-owner::after {
-    content: ' · ';
 }
 
 .week-calendar-task-goal-text {
@@ -9040,11 +9147,103 @@ button.swimlane-section-card-settings {
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     padding: 2px 4px 2px 0;
+}
+
+/* 描述占原宽度的左半，右半让位给柱状图 */
+.task-panel-task-desc-wrap {
+    flex: 0 0 50%;
+    min-width: 0;
+}
+
+/* 最近 8 周执行时长柱状图：柱子紧贴，统一 y 轴由行内高度归一，底部为 x 轴线；
+   顶部预留数据行（悬浮时显示周数 / 时长） */
+.task-panel-week-chart {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 54px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0;
+    overflow: hidden;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+/* 悬浮数据行：每格与下方柱体宽度一致，两行依次为周数、总时长 */
+.task-panel-week-hover-row {
+    flex: 0 0 22px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.task-panel-week-chart:hover .task-panel-week-hover-row {
+    visibility: visible;
+    opacity: 1;
+}
+
+.task-panel-week-hover-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.task-panel-week-hover-week {
+    font-size: 9px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.task-panel-week-hover-hours {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-panel-week-bars {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0;
+}
+
+.task-panel-week-bar {
+    flex: 1 1 0;
+    min-width: 0;
+    background: var(--sdt-text-secondary, var(--text-muted));
+    opacity: 0.55;
+    transition: opacity 0.12s ease;
+}
+
+.task-panel-week-chart.is-main .task-panel-week-bar {
+    background: var(--color-blue);
+}
+
+.task-panel-week-chart.is-side .task-panel-week-bar {
+    background: var(--color-purple);
+}
+
+.task-panel-week-bar.is-empty {
+    background: transparent;
+}
+
+.task-panel-week-bar:hover {
+    opacity: 1;
 }
 
 .task-panel-task-desc {
@@ -9062,40 +9261,6 @@ button.swimlane-section-card-settings {
 .task-panel-task-desc.is-empty {
     color: var(--text-faint);
     font-style: italic;
-}
-
-.task-panel-task-type {
-    flex-shrink: 0;
-    align-self: center;
-    margin-left: auto;
-    white-space: nowrap;
-    padding: 1px 8px;
-    border-radius: 999px;
-    font-size: 10px;
-    line-height: 1.4;
-}
-
-.task-panel-task-type.is-switchable {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    cursor: pointer;
-    transition: filter 0.15s ease;
-}
-
-.task-panel-task-type.is-switchable:hover {
-    filter: brightness(1.18);
-}
-
-.task-panel-task-type-caret {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.task-panel-task-type-caret svg {
-    width: 11px;
-    height: 11px;
 }
 
 /* 类型切换下拉：固定在 body 上，层级高于悬浮面板（z-index 900） */
@@ -9140,16 +9305,6 @@ button.swimlane-section-card-settings {
 .task-panel-type-menu-check svg {
     width: 12px;
     height: 12px;
-}
-
-.task-panel-existing-item.is-main .task-panel-task-type {
-    background: rgba(59, 130, 246, 0.16);
-    color: var(--color-blue);
-}
-
-.task-panel-existing-item.is-side .task-panel-task-type {
-    background: rgba(168, 85, 247, 0.14);
-    color: var(--color-purple);
 }
 
 /* 任务配置面板：表单字段 */
@@ -9266,6 +9421,131 @@ button.swimlane-section-card-settings {
 
 .task-panel-add-btn {
     flex-shrink: 0;
+}
+
+/* 归属方块行末尾的查看归档按钮（胶囊样式，激活后高亮） */
+.task-panel-archive-toggle {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    padding: 4px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 999px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    color: var(--sdt-text-secondary, var(--text-muted));
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.task-panel-archive-toggle:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.task-panel-archive-toggle.is-active {
+    border-color: var(--interactive-accent);
+    color: var(--interactive-accent);
+}
+
+.task-panel-archive-toggle-icon {
+    display: flex;
+    align-items: center;
+}
+
+.task-panel-archive-toggle-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+/* 查看归档时隐藏归属方块（保留行内的查看归档按钮）与已有任务列表，仅显示归档列表 */
+.task-panel-targets.is-archive .task-panel-target,
+.task-panel-existing.is-hidden,
+.task-panel-archive-list.is-hidden {
+    display: none;
+}
+
+/* 归档任务列表：名称 + 描述 + 移出归档按钮 */
+.task-panel-archive-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.task-panel-archive-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 8px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+}
+
+/* 左侧：任务名称 + 描述 */
+.task-panel-archive-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.task-panel-archive-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-panel-archive-desc {
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-panel-archive-desc.is-empty {
+    color: var(--text-faint);
+}
+
+.task-panel-archive-empty {
+    padding: 16px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+/* 行末尾前：总执行时长方块（含后代累计） */
+.task-panel-archive-duration {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 4px;
+    background: var(--background-modifier-hover);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+/* 行末尾：移出归档按钮 */
+.task-panel-unarchive-btn {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 12px;
 }
 
 .task-panel-input:focus {
@@ -11586,6 +11866,15 @@ button.task-record-dropdown-item.is-selected {
     border-right: none;
 }
 
+/* 已选中任务时：列可点击排布，悬停给出反馈 */
+.plan-week-column.is-assignable {
+    cursor: pointer;
+}
+
+.plan-week-column.is-assignable:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
 /* 列内已排布的任务小卡片 */
 .plan-week-task-chip {
     position: relative;
@@ -11603,11 +11892,126 @@ button.task-record-dropdown-item.is-selected {
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
+/* 跨列合并的任务卡片：第一行灰色父层级，第二行任务名；按自身高度排列，不撑满整个泳道行 */
+.plan-week-span-chip {
+    align-self: start;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    margin: 4px 2px;
+}
+
+.plan-week-task-chip-path {
+    min-width: 0;
+    min-height: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-faint);
+    font-size: 10px;
+}
+
 .plan-week-task-chip-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 日目标标识：卡片内某天已填写日目标时，该天所在列右下角显示圆圈；全部完成时显示打勾（仅视觉提示，不响应点击） */
+.plan-week-daygoal-mark {
+    position: absolute;
+    bottom: 2px;
+    display: flex;
+    align-items: center;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    pointer-events: none;
+}
+
+.plan-week-daygoal-mark .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* 日目标悬浮预览：悬浮卡片某天区域时展示该天已填写的日目标，挂在面板根节点上 */
+.plan-week-daygoal-tip {
+    position: absolute;
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 140px;
+    max-width: 220px;
+    padding: 8px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    /* 仅作预览，不拦截鼠标，保证卡片悬浮交互连续 */
+    pointer-events: none;
+}
+
+.plan-week-daygoal-tip-head {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.plan-week-daygoal-tip-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+/* 已完成的日目标：图标与文字淡化 */
+.plan-week-daygoal-tip-item.is-done {
+    color: var(--text-faint);
+}
+
+.plan-week-daygoal-tip-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.plan-week-daygoal-tip-icon .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.plan-week-daygoal-tip-item.is-done .plan-week-daygoal-tip-icon {
+    color: var(--text-faint);
+}
+
+.plan-week-daygoal-tip-text {
+    min-width: 0;
+    word-break: break-word;
+}
+
+/* 日目标编辑浮层：点击卡片某天时在卡片旁弹出，复用预览浮层定位，支持勾选 / 新增 / 删除 */
+.plan-week-daygoal-editor {
+    display: flex;
+    gap: 6px;
+    min-width: 200px;
+    max-width: 260px;
+    /* 可交互：覆盖预览浮层的 pointer-events: none */
+    pointer-events: auto;
+}
+
+.plan-week-daygoal-editor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.plan-week-daygoal-editor-empty {
+    font-size: 12px;
+    color: var(--text-faint);
 }
 
 /* 习惯模式：周日历里的习惯卡片（时间 + 任务名，无删除按钮；连续星期跨列合并） */
@@ -12133,8 +12537,9 @@ button.task-record-dropdown-item.is-selected {
     display: none;
 }
 
-/* 目标条目：两行卡片（第一行图标 + 目标文字，第二行分配的周数） */
+/* 目标条目：单行卡片（图标 + 目标文字 + 右上角周标识），点击可选中 */
 .plan-annual-goal-item {
+    position: relative;
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -12145,6 +12550,18 @@ button.task-record-dropdown-item.is-selected {
     background: var(--sdt-card-bg, var(--background-secondary));
     font-size: 12px;
     color: var(--sdt-text-primary, var(--text-normal));
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.plan-annual-goal-item:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+/* 选中目标：选中后点击底部目标格子即可分配周 */
+.plan-annual-goal-item.is-selected {
+    border-color: var(--interactive-accent);
+    background: var(--background-modifier-hover);
 }
 
 .plan-annual-goal-main {
@@ -12154,15 +12571,16 @@ button.task-record-dropdown-item.is-selected {
     min-width: 0;
 }
 
-/* 第二行：分配的周数（与第一行文字左对齐） */
-.plan-annual-goal-week-label {
-    padding-left: 19px;
-    font-size: 11px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-}
-
-.plan-annual-goal-week-label.is-unassigned {
-    color: var(--text-faint);
+/* 右上角已绑定周的标识：如 w05 */
+.plan-annual-goal-week-badge {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: var(--background-modifier-hover);
+    font-size: 10px;
+    line-height: 15px;
+    color: var(--interactive-accent);
 }
 
 .plan-annual-goal-icon {
@@ -12181,39 +12599,6 @@ button.task-record-dropdown-item.is-selected {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-/* 目标卡片末尾的日历图标：点击选择分配到某一周 */
-.plan-annual-goal-week-btn {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    margin-left: auto;
-    padding: 2px;
-    border-radius: 3px;
-    color: var(--sdt-text-secondary, var(--text-muted));
-    cursor: pointer;
-}
-
-.plan-annual-goal-week-btn:hover {
-    color: var(--sdt-text-primary, var(--text-normal));
-    background: var(--sdt-hover-bg, var(--background-modifier-hover));
-}
-
-/* 已分配到周：图标高亮 */
-.plan-annual-goal-week-btn.is-assigned {
-    color: var(--interactive-accent);
-}
-
-.plan-annual-goal-week-btn .svg-icon {
-    width: 13px;
-    height: 13px;
-}
-
-/* 周选择菜单：周数较多时限制高度并滚动 */
-.plan-annual-week-menu {
-    max-height: 260px;
-    overflow-y: auto;
 }
 
 /* 已完成目标：置灰加删除线 */
@@ -12587,13 +12972,27 @@ body.plan-annual-dragging {
     overflow-y: auto;
 }
 
-/* 底部目标区的当前周列背景：与表头、泳道列同样的条纹 */
-.plan-annual-goal-current {
+/* 底部目标区的列格子层：与上方周列一一对齐，悬浮高亮、点击新增目标 */
+.plan-annual-goal-cells {
     position: absolute;
     top: 0;
     bottom: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
+    left: 1px;
+    right: 1px;
+    display: flex;
+}
+
+.plan-annual-goal-cell {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    cursor: pointer;
+}
+
+/* 当前周格子：与表头、泳道列同样的条纹背景 */
+.plan-annual-goal-cell.is-current {
+    background-image: repeating-linear-gradient(
         45deg,
         var(--background-modifier-hover) 0,
         var(--background-modifier-hover) 4px,
@@ -12602,17 +13001,24 @@ body.plan-annual-dragging {
     );
 }
 
+.plan-annual-goal-cell:hover {
+    background-color: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
 .plan-annual-goal-empty {
+    position: relative;
     align-self: center;
     font-size: 12px;
     color: var(--text-faint);
+    pointer-events: none;
 }
 
-/* 目标行层：相对定位，目标行按周列百分比定位 */
+/* 目标行层：相对定位，目标行按周列百分比定位；不拦截鼠标，保证格子悬浮与点击连续 */
 .plan-annual-goal-body {
     position: relative;
     flex: 0 0 auto;
     margin: 0 1px;
+    pointer-events: none;
 }
 
 /* 目标行：图标 + 文字，图标落在绑定周列，文字向右延伸 */
@@ -12658,65 +13064,88 @@ body.plan-annual-dragging {
     text-decoration: line-through;
 }
 
-/* 底部目标区悬浮面板：显示悬浮周列绑定的全部目标 */
-.plan-annual-goal-tip {
-    position: fixed;
-    z-index: 1100;
-    min-width: 120px;
-    max-width: 260px;
-    padding: 6px 8px;
+/* 点击目标格子后的新增目标浮层（挂在面板根节点内，按格子定位） */
+.plan-annual-goal-editor {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 220px;
+    box-sizing: border-box;
+    padding: 8px 10px;
     border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
     border-radius: 6px;
-    background: var(--background-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-    font-size: 11px;
+    background: var(--sdt-control-bg, var(--background-primary));
     color: var(--sdt-text-primary, var(--text-normal));
-    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-.plan-annual-goal-tip-title {
-    margin-bottom: 4px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    font-weight: 600;
-    color: var(--text-muted);
-}
-
-.plan-annual-goal-tip-empty {
+.plan-annual-goal-editor-head {
+    font-size: 11px;
     color: var(--text-faint);
 }
 
-.plan-annual-goal-tip-item {
+.plan-annual-goal-editor-add {
+    display: flex;
+}
+
+.plan-annual-goal-editor-input {
+    flex: 1;
+    min-width: 0;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 3px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    font-size: 12px;
+}
+
+.plan-annual-goal-editor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 140px;
+    overflow-y: auto;
+}
+
+.plan-annual-goal-editor-empty {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.plan-annual-goal-editor-item {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 2px 0;
+    font-size: 12px;
 }
 
-.plan-annual-goal-tip-icon {
+.plan-annual-goal-editor-icon {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
     color: var(--text-muted);
 }
 
-.plan-annual-goal-tip-icon .svg-icon {
+.plan-annual-goal-editor-icon .svg-icon {
     width: 13px;
     height: 13px;
 }
 
-.plan-annual-goal-tip-text {
+.plan-annual-goal-editor-text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.plan-annual-goal-tip-item.is-done .plan-annual-goal-tip-icon {
+.plan-annual-goal-editor-item.is-done .plan-annual-goal-editor-icon {
     color: var(--interactive-accent);
 }
 
-.plan-annual-goal-tip-item.is-done .plan-annual-goal-tip-text {
+.plan-annual-goal-editor-item.is-done .plan-annual-goal-editor-text {
     color: var(--text-faint);
     text-decoration: line-through;
 }
@@ -12845,6 +13274,43 @@ body.plan-annual-dragging {
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
+/* 标题栏帮助按钮（默认不启用，传入 helpText 时显示）：悬停弹出提示气泡，移开即关闭 */
+.floating-panel-help {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.floating-panel-help .floating-panel-action svg {
+    width: 16px;
+    height: 16px;
+}
+
+.floating-panel-help-tip {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 40;
+    display: none;
+    width: 420px;
+    max-width: calc(100vw - 48px);
+    padding: 8px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+.floating-panel-help-tip.is-visible {
+    display: block;
+}
+
 .floating-panel-body {
     flex: 1;
     min-height: 0;
@@ -12854,6 +13320,7 @@ body.plan-annual-dragging {
 
 /* ======================== 文件编辑面板 ======================== */
 .floating-panel-body.file-editor-panel {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: none;
@@ -12861,6 +13328,39 @@ body.plan-annual-dragging {
     max-height: calc(100vh - 160px);
     padding: 0;
     overflow: hidden;
+}
+
+/* 右侧中部固定悬浮按钮：半透明，悬停加深 */
+.file-editor-panel-to-end {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    background: var(--sdt-card-bg, var(--background-secondary));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    color: var(--sdt-text-secondary, var(--text-muted));
+    opacity: 0.55;
+    cursor: pointer;
+    transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.file-editor-panel-to-end:hover {
+    opacity: 1;
+    background: var(--sdt-interactive-bg, var(--background-modifier-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.file-editor-panel-to-end .svg-icon {
+    width: 16px;
+    height: 16px;
 }
 
 .file-editor-panel-toolbar {

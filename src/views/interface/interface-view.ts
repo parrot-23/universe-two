@@ -7,6 +7,7 @@ import { createInterfaceCardShell } from '../../component/cards/interface-card-s
 import { NavCard } from '../../component/cards/nav-card';
 import { TodayCard } from '../../component/cards/task/today-card';
 import { TodayTasksCard } from '../../component/cards/task/today-tasks-card';
+import { TodayTasksSimpleCard } from '../../component/cards/task/today-tasks-simple-card';
 import { ClockCard } from '../../component/cards/clock-card';
 import type { PrototypeTask, PrototypeTaskType } from '../../datatypes/prototype-task';
 import { t } from '../../i18n';
@@ -84,6 +85,8 @@ export class InterfaceView {
     private todayCard: TodayCard | null = null;
     /** 今日任务（折叠列表）卡片组件 */
     private todayTasksCard: TodayTasksCard | null = null;
+    /** 今日任务（简洁版）卡片组件 */
+    private todayTasksSimpleCard: TodayTasksSimpleCard | null = null;
     /** 独立时钟卡片组件 */
     private clockCard: ClockCard | null = null;
     /** 垂直功能栏卡片组件 */
@@ -208,7 +211,12 @@ export class InterfaceView {
         this.selectedDate = next;
         this.todayCard?.setSelectedDate(next);
         this.todayTasksCard?.setSelectedDate(next);
+        this.todayTasksSimpleCard?.setSelectedDate(next);
         this.clockCard?.setSelectedDate(next);
+        // 周历面板已打开时跟随工具栏日期刷新（本日目标按高亮日期展示）
+        if (this.datePanel?.isOpen) {
+            this.datePanel.showWeek(makeWeekKey(next.getFullYear(), getISOWeek(next)), makeDayKey(next));
+        }
         this.viewOptions.onSelectedDateChange?.(next);
     }
 
@@ -220,7 +228,10 @@ export class InterfaceView {
                 tasks: this.rootPrototypeTasks(),
                 onSubmit: (payload) => this.addPrototypeTask(payload.name, payload.type),
                 onTaskClick: (task) => this.openTaskDetail(task),
-                onChangeTaskType: (task, type) => this.changePrototypeTaskType(task, type),
+                getAllTasks: () => this.prototypeTaskRepo.tasks,
+                getExecutions: () => this.taskExecutionRepo.records,
+                getArchivedTasks: () => this.prototypeTaskRepo.archivedRootTasks,
+                onUnarchiveTask: (taskId) => this.unarchivePrototypeTask(taskId),
             });
         } else {
             this.taskPanel.setTasks(this.rootPrototypeTasks());
@@ -424,6 +435,13 @@ export class InterfaceView {
         this.refreshTaskConsumers();
     }
 
+    /** 移出归档：恢复任务到正常列表并持久化 */
+    private unarchivePrototypeTask(taskId: string): void {
+        this.prototypeTaskRepo.unarchive(taskId);
+        void (this.plugin as Plugin & { saveAll: () => Promise<void> }).saveAll();
+        this.refreshTaskConsumers();
+    }
+
     /** 删除任务：仅删当前任务（子任务提升为根任务），销毁对应详情面板并刷新列表 */
     private deletePrototypeTask(taskId: string): void {
         this.prototypeTaskRepo.remove(taskId);
@@ -474,7 +492,10 @@ export class InterfaceView {
     }
 
     /** 更新原型任务的名称 / 描述 / 分类：写仓库 + 持久化（改名时同步重命名任务目录） */
-    private updatePrototypeTask(taskId: string, patch: { name?: string; description?: string; categoryId?: string }): void {
+    private updatePrototypeTask(
+        taskId: string,
+        patch: { name?: string; description?: string; categoryId?: string },
+    ): void {
         this.prototypeTaskRepo.update(taskId, patch);
         void (this.plugin as Plugin & { saveAll: () => Promise<void> }).saveAll();
         if (patch.name === undefined) return;
@@ -552,6 +573,7 @@ export class InterfaceView {
                 onSelectedDateChange: (date) => this.applySelectedDate(date),
                 onRunningTaskChanged: () => {
                     this.todayTasksCard?.refresh();
+                    this.todayTasksSimpleCard?.refresh();
                     this.clockCard?.refresh();
                 },
             });
@@ -567,19 +589,52 @@ export class InterfaceView {
                 onSelectedDateChange: (date) => this.applySelectedDate(date),
                 onRunningTaskChanged: () => {
                     this.todayCard?.reloadRunningState();
+                    this.todayTasksSimpleCard?.refresh();
                     this.clockCard?.refresh();
                 },
                 onExecutionChanged: () => {
                     this.todayCard?.refreshClockDisplay();
+                    this.todayTasksSimpleCard?.refresh();
                     this.clockCard?.refresh();
                 },
                 onTasksChanged: () => {
                     this.todayCard?.refreshTasks();
+                    this.todayTasksSimpleCard?.refresh();
                 },
                 onOpenTaskBoard: (taskId) => this.openTaskBoard(taskId),
             });
             const tasksBody = this.mountCard(main, 'today-tasks', 'card-today-tasks', () => this.setCardAdded('today-tasks', false));
             this.todayTasksCard.render(tasksBody);
+        }
+
+        // 今日任务（简洁版）卡片：独立实现，无顶部日期切换、习惯为方块卡片
+        if (this.isCardAdded('today-tasks-simple')) {
+            this.todayTasksSimpleCard ??= new TodayTasksSimpleCard({
+                plugin: this.plugin,
+                initialDate: this.selectedDate,
+                onRunningTaskChanged: () => {
+                    this.todayCard?.reloadRunningState();
+                    this.todayTasksCard?.refresh();
+                    this.clockCard?.refresh();
+                },
+                onExecutionChanged: () => {
+                    this.todayCard?.refreshClockDisplay();
+                    this.todayTasksCard?.refresh();
+                    this.clockCard?.refresh();
+                },
+                onTasksChanged: () => {
+                    this.todayCard?.refreshTasks();
+                    this.todayTasksCard?.refresh();
+                },
+                onOpenTaskBoard: (taskId) => this.openTaskBoard(taskId),
+            });
+            const simpleBody = this.mountCard(
+                main,
+                'today-tasks-simple',
+                'card-today-tasks-simple',
+                () => this.setCardAdded('today-tasks-simple', false),
+            );
+            this.todayTasksSimpleCard.render(simpleBody);
         }
 
         // 时钟卡片（24 小时时钟单独绘制）：默认不显示，由编辑模式的「添加」面板加入

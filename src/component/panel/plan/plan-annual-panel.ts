@@ -6,7 +6,7 @@
 // 排布：拖动色块左右手柄调整区间起止周，在行内空白周列拖拽新建区间；松手后同步该任务全年整周排布。
 import { setIcon } from 'obsidian';
 
-import type { PrototypeTask, TaskGoalEntry } from '../../../datatypes/prototype-task';
+import type { PrototypeTask } from '../../../datatypes/prototype-task';
 import type { TaskStatus } from '../../../datatypes/domain';
 import { t } from '../../../i18n';
 import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
@@ -180,16 +180,22 @@ export class PlanAnnualPanel extends FloatingPanel {
     private rootTaskId: string | undefined;
     /** 任务树中选中的任务 id */
     private selectedTaskId: string | undefined;
+    /** 目标列表中选中的目标 id：选中后点击底部格子可直接分配周 */
+    private selectedGoalId: string | undefined;
     /** 当前季度内的周列表 */
     private quarterWeeks: QuarterWeek[] = [];
     /** 当前拖拽状态 */
     private drag: DragState | null = null;
     /** 状态下拉列表（挂在 body 上） */
     private statusMenuEl: HTMLElement | null = null;
-    /** 底部目标区悬浮面板（挂在 body 上） */
-    private goalTipEl: HTMLElement | null = null;
-    /** 悬浮面板当前对应的周键（避免同一列重复渲染） */
-    private goalTipWeekKey: string | null = null;
+    /** 点击目标格子后的新增目标浮层（挂在面板根节点内） */
+    private goalEditorEl: HTMLElement | null = null;
+    /** 新增目标浮层对应的周键 */
+    private goalEditorWeekKey: string | null = null;
+    /** 新增目标浮层的定位锚点（目标格子元素） */
+    private goalEditorAnchorEl: HTMLElement | null = null;
+    private goalEditorOutsideHandler: ((evt: MouseEvent) => void) | null = null;
+    private goalEditorKeyHandler: ((evt: KeyboardEvent) => void) | null = null;
 
     /** 点击下拉列表外关闭 */
     private readonly onStatusMenuOutside = (evt: MouseEvent): void => {
@@ -239,7 +245,7 @@ export class PlanAnnualPanel extends FloatingPanel {
     override close(): void {
         this.cancelDrag();
         this.closeStatusMenu();
-        this.hideGoalTip();
+        this.closeGoalEditor();
         super.close();
     }
 
@@ -247,7 +253,7 @@ export class PlanAnnualPanel extends FloatingPanel {
     override destroy(): void {
         this.cancelDrag();
         this.closeStatusMenu();
-        this.hideGoalTip();
+        this.closeGoalEditor();
         super.destroy();
     }
 
@@ -267,8 +273,10 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.goalButtonEl.addEventListener('click', () => this.switchLeftMode('goal'));
         this.rootSelectEl = left.createEl('select', { cls: 'dropdown plan-annual-root-select' });
         this.rootSelectEl.addEventListener('change', () => {
+            this.closeGoalEditor();
             this.rootTaskId = this.rootSelectEl.value || undefined;
             this.selectedTaskId = undefined;
+            this.selectedGoalId = undefined;
             this.renderTree();
             this.renderGoalList();
             this.renderLanes();
@@ -303,10 +311,6 @@ export class PlanAnnualPanel extends FloatingPanel {
             this.clearBarSelection();
         });
 
-        // 底部目标区：悬浮某一周列时显示该周全部分配目标的悬浮面板
-        this.goalEl.addEventListener('pointermove', (evt) => this.onGoalHover(evt));
-        this.goalEl.addEventListener('pointerleave', () => this.hideGoalTip());
-
         // 纵向滚动同步：任一侧滚动时另一侧跟随，保证任务树行与泳道行始终对齐
         this.treeEl.addEventListener('scroll', () => {
             this.laneEl.scrollTop = this.treeEl.scrollTop;
@@ -326,6 +330,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.goalButtonEl.toggleClass('is-active', mode === 'goal');
         this.treeEl.toggleClass('is-hidden', mode !== 'task');
         this.goalListEl.toggleClass('is-hidden', mode !== 'goal');
+        // 目标列表隐藏时清空目标选中态，避免看不到选中项时误分配
+        if (mode === 'task') this.selectedGoalId = undefined;
         if (mode === 'goal') this.renderGoalList();
     }
 
@@ -333,78 +339,36 @@ export class PlanAnnualPanel extends FloatingPanel {
     private renderGoalList(): void {
         this.goalListEl.empty();
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
-        for (const goal of rootTask?.goals ?? []) {
+        const goals = rootTask?.goals ?? [];
+        // 选中的目标已不存在时清空选中态
+        if (this.selectedGoalId && !goals.some((goal) => goal.id === this.selectedGoalId)) {
+            this.selectedGoalId = undefined;
+        }
+        for (const goal of goals) {
             const card = this.goalListEl.createDiv({ cls: 'plan-annual-goal-item' });
+            card.dataset.goalId = goal.id;
             card.toggleClass('is-done', goal.done === true);
-            // 第一行：图标 + 目标文字 + 末尾日历图标
+            card.toggleClass('is-selected', goal.id === this.selectedGoalId);
+            // 点击条目选中 / 取消选中，选中后在底部目标格子点击即可分配周
+            card.addEventListener('click', () => {
+                this.selectedGoalId = this.selectedGoalId === goal.id ? undefined : goal.id;
+                this.renderGoalList();
+            });
+            // 图标 + 目标文字 + 右上角已绑定周的标识（如 w05）
             const main = card.createDiv({ cls: 'plan-annual-goal-main' });
             setIcon(main.createSpan({ cls: 'plan-annual-goal-icon' }), goal.done ? 'circle-check' : 'target');
             main.createSpan({ cls: 'plan-annual-goal-text', text: goal.text });
-            // 末尾日历图标：点击选择把该目标分配到某一周
-            const weekBtn = main.createSpan({ cls: 'plan-annual-goal-week-btn' });
-            weekBtn.toggleClass('is-assigned', !!goal.startWeek);
-            setIcon(weekBtn, 'calendar');
-            weekBtn.title = goal.startWeek
-                ? this.formatWeekRange(goal.startWeek, goal.endWeek ?? goal.startWeek)
-                : t('panel.planAnnualAssignWeek');
-            weekBtn.addEventListener('click', (evt) => {
-                evt.stopPropagation();
-                this.openGoalWeekMenu(weekBtn, goal);
-            });
-            // 第二行：已分配的周数（未分配时显示提示文案）
-            const weekLabel = card.createDiv({ cls: 'plan-annual-goal-week-label' });
-            weekLabel.toggleClass('is-unassigned', !goal.startWeek);
-            weekLabel.setText(
-                goal.startWeek
-                    ? this.formatWeekRangeShort(goal.startWeek, goal.endWeek ?? goal.startWeek)
-                    : t('panel.planAnnualAssignWeek'),
-            );
+            if (goal.startWeek) {
+                const week = this.quarterWeeks.find((item) => item.weekKey === goal.startWeek);
+                if (week) {
+                    main.createSpan({
+                        cls: 'plan-annual-goal-week-badge',
+                        text: `w${String(week.week).padStart(2, '0')}`,
+                    });
+                }
+            }
         }
         this.renderGoalAddCard(rootTask);
-    }
-
-    /** 打开周选择菜单：列出当前季度各周，点击把目标分配到该周（再次点击同一周取消分配） */
-    private openGoalWeekMenu(anchorEl: HTMLElement, goal: TaskGoalEntry): void {
-        this.closeStatusMenu();
-        const menu = document.body.createDiv({ cls: 'plan-annual-status-menu plan-annual-week-menu' });
-        applyThemeColors(menu, getCurrentThemeColors());
-        this.statusMenuEl = menu;
-        for (const item of this.quarterWeeks) {
-            const row = menu.createDiv({ cls: 'plan-annual-status-item' });
-            row.toggleClass('is-active', goal.startWeek === item.weekKey);
-            setIcon(row.createSpan({ cls: 'plan-annual-status-item-icon' }), 'calendar');
-            row.createSpan({
-                cls: 'plan-annual-status-item-text',
-                text: `W${String(item.week).padStart(2, '0')}  ${Number(item.mondayKey.slice(5, 7))}/${Number(item.mondayKey.slice(8, 10))}`,
-            });
-            row.addEventListener('click', (evt) => {
-                evt.stopPropagation();
-                if (goal.startWeek === item.weekKey) {
-                    goal.startWeek = undefined;
-                    goal.endWeek = undefined;
-                } else {
-                    goal.startWeek = item.weekKey;
-                    goal.endWeek = item.weekKey;
-                }
-                void this.panelOptions.save();
-                this.closeStatusMenu();
-                this.renderGoalList();
-                this.renderGoalLanes();
-                this.panelOptions.onChanged?.();
-            });
-        }
-        // 贴在图标下方，右侧空间不足时向左收敛
-        const rect = anchorEl.getBoundingClientRect();
-        const width = menu.offsetWidth;
-        const height = menu.offsetHeight;
-        const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-        const top = rect.bottom + height > window.innerHeight - 8
-            ? Math.max(8, rect.top - height - 4)
-            : rect.bottom + 4;
-        menu.style.left = `${left}px`;
-        menu.style.top = `${top}px`;
-        document.addEventListener('mousedown', this.onStatusMenuOutside, true);
-        document.addEventListener('keydown', this.onStatusMenuKeyDown);
     }
 
     /** 目标列表末尾的「添加目标」卡片：点击后变为内联输入框，回车保存并关闭 */
@@ -621,19 +585,24 @@ export class PlanAnnualPanel extends FloatingPanel {
 
     /**
      * 底部目标区：与上方周列对齐。
-     * 只绘制已分配到周的目标；同一周有多个目标时依次换行，每行为「图标 + 文字」。
+     * 底层按周列分割为格子（悬浮高亮、点击新增目标）；上层绘制已分配到周的目标，
+     * 同一周有多个目标时依次换行，每行为「图标 + 文字」。
      */
     private renderGoalLanes(): void {
         this.goalEl.empty();
-        this.hideGoalTip();
         const count = this.quarterWeeks.length;
-        // 当前周列背景：与表头、泳道列使用同样的条纹，纵向贯通到目标区
-        const currentIndex = this.quarterWeeks.findIndex((item) => item.weekKey === getCurrentWeekKey());
-        if (currentIndex >= 0 && count > 0) {
-            const marker = this.goalEl.createDiv({ cls: 'plan-annual-goal-current' });
-            marker.style.left = `${(currentIndex / count) * 100}%`;
-            marker.style.width = `${(1 / count) * 100}%`;
+        if (count === 0) return;
+
+        // 列格子层：每列一格，当前周显示与表头 / 泳道一致的条纹
+        const cells = this.goalEl.createDiv({ cls: 'plan-annual-goal-cells' });
+        const currentWeekKey = getCurrentWeekKey();
+        for (const item of this.quarterWeeks) {
+            const cell = cells.createDiv({ cls: 'plan-annual-goal-cell' });
+            cell.dataset.weekKey = item.weekKey;
+            cell.toggleClass('is-current', item.weekKey === currentWeekKey);
+            cell.addEventListener('click', () => this.handleGoalCellClick(item, cell));
         }
+
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         // 已分配且落在当前季度内的目标，按周从左到右排序（同周按创建时间）
         const placed = (rootTask?.goals ?? [])
@@ -671,69 +640,154 @@ export class PlanAnnualPanel extends FloatingPanel {
         }
     }
 
-    /** 底部目标区悬浮：按鼠标横坐标定位周列，显示该周全部分配目标的悬浮面板 */
-    private onGoalHover(evt: PointerEvent): void {
-        const rect = this.goalEl.getBoundingClientRect();
-        const count = this.quarterWeeks.length;
-        if (count === 0) return;
-        const index = Math.floor(((evt.clientX - rect.left) / rect.width) * count);
-        if (index < 0 || index >= count) {
-            this.hideGoalTip();
+    /** 点击底部目标格子：有选中目标时直接分配（同周再点取消），否则打开新增目标浮层 */
+    private handleGoalCellClick(week: QuarterWeek, cell: HTMLElement): void {
+        const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
+        const goal = this.selectedGoalId
+            ? (rootTask?.goals ?? []).find((item) => item.id === this.selectedGoalId)
+            : undefined;
+        if (!goal) {
+            this.openGoalEditor(week, cell);
             return;
         }
-        const week = this.quarterWeeks[index];
-        if (week.weekKey !== this.goalTipWeekKey) {
-            this.goalTipWeekKey = week.weekKey;
-            this.renderGoalTip(week);
-        }
-        this.placeGoalTip(evt.clientX, evt.clientY);
+        // 一个目标只绑定一个周：点击其他周即改绑，点击已绑定的周则取消
+        const sameWeek = goal.startWeek === week.weekKey;
+        goal.startWeek = sameWeek ? undefined : week.weekKey;
+        goal.endWeek = sameWeek ? undefined : week.weekKey;
+        void this.panelOptions.save();
+        this.closeGoalEditor();
+        this.renderGoalList();
+        this.renderGoalLanes();
+        this.panelOptions.onChanged?.();
     }
 
-    /** 渲染悬浮面板：标题为周号 + 周一日期，内容为该周绑定的全部目标（图标 + 文字） */
-    private renderGoalTip(week: QuarterWeek): void {
-        if (!this.goalTipEl) {
-            this.goalTipEl = document.body.createDiv({ cls: 'plan-annual-goal-tip' });
-            applyThemeColors(this.goalTipEl, getCurrentThemeColors());
+    /** 点击目标格子：在格子旁打开新增目标浮层（点击外部 / Esc 关闭） */
+    private openGoalEditor(week: QuarterWeek, anchorEl: HTMLElement): void {
+        this.closeGoalEditor();
+        const editor = this.element.createDiv({ cls: 'plan-annual-goal-editor' });
+        this.goalEditorEl = editor;
+        this.goalEditorWeekKey = week.weekKey;
+        this.goalEditorAnchorEl = anchorEl;
+        this.goalEditorOutsideHandler = (evt: MouseEvent) => {
+            if (editor.contains(evt.target as Node)) return;
+            this.closeGoalEditor();
+        };
+        this.goalEditorKeyHandler = (evt: KeyboardEvent) => {
+            if (evt.key !== 'Escape') return;
+            // 先关闭浮层，避免同时关闭整个面板
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.closeGoalEditor();
+        };
+        document.addEventListener('mousedown', this.goalEditorOutsideHandler, true);
+        document.addEventListener('keydown', this.goalEditorKeyHandler, true);
+        this.renderGoalEditor();
+    }
+
+    /** 关闭新增目标浮层（移除元素与 document 监听） */
+    private closeGoalEditor(): void {
+        if (this.goalEditorOutsideHandler) {
+            document.removeEventListener('mousedown', this.goalEditorOutsideHandler, true);
+            this.goalEditorOutsideHandler = null;
         }
-        const tip = this.goalTipEl;
-        tip.empty();
-        tip.createDiv({
-            cls: 'plan-annual-goal-tip-title',
+        if (this.goalEditorKeyHandler) {
+            document.removeEventListener('keydown', this.goalEditorKeyHandler, true);
+            this.goalEditorKeyHandler = null;
+        }
+        this.goalEditorEl?.remove();
+        this.goalEditorEl = null;
+        this.goalEditorWeekKey = null;
+        this.goalEditorAnchorEl = null;
+    }
+
+    /** 重绘新增目标浮层（周标题 + 输入行 + 该周已有目标）并按锚点定位 */
+    private renderGoalEditor(): void {
+        const editor = this.goalEditorEl;
+        const weekKey = this.goalEditorWeekKey;
+        if (!editor || !weekKey) return;
+        const week = this.quarterWeeks.find((item) => item.weekKey === weekKey);
+        if (!week) {
+            this.closeGoalEditor();
+            return;
+        }
+        editor.empty();
+        editor.createDiv({
+            cls: 'plan-annual-goal-editor-head',
             text: `W${String(week.week).padStart(2, '0')} · ${Number(week.mondayKey.slice(5, 7))}/${Number(week.mondayKey.slice(8, 10))}`,
         });
+        // 新增行：回车提交并保持输入焦点，便于连续添加
+        const addRow = editor.createDiv({ cls: 'plan-annual-goal-editor-add' });
+        const input = addRow.createEl('input', {
+            cls: 'plan-annual-goal-editor-input',
+            attr: { type: 'text', placeholder: t('panel.planAnnualAddGoal') },
+        });
+        input.addEventListener('keydown', (evt) => {
+            if (evt.key !== 'Enter') return;
+            evt.preventDefault();
+            this.addGoalToWeek(input.value.trim(), weekKey);
+        });
+        const list = editor.createDiv({ cls: 'plan-annual-goal-editor-list' });
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         const goals = (rootTask?.goals ?? [])
-            .filter((goal) => goal.startWeek === week.weekKey)
+            .filter((goal) => goal.startWeek === weekKey)
             .sort((a, b) => a.createdAt - b.createdAt);
         if (goals.length === 0) {
-            tip.createDiv({ cls: 'plan-annual-goal-tip-empty', text: t('panel.planAnnualNoGoal') });
-            return;
+            list.createDiv({ cls: 'plan-annual-goal-editor-empty', text: t('panel.planAnnualNoGoal') });
         }
         for (const goal of goals) {
-            const row = tip.createDiv({ cls: 'plan-annual-goal-tip-item' });
+            const row = list.createDiv({ cls: 'plan-annual-goal-editor-item' });
             row.toggleClass('is-done', goal.done === true);
-            setIcon(row.createSpan({ cls: 'plan-annual-goal-tip-icon' }), goal.done ? 'circle-check' : 'target');
-            row.createSpan({ cls: 'plan-annual-goal-tip-text', text: goal.text });
+            setIcon(
+                row.createSpan({ cls: 'plan-annual-goal-editor-icon' }),
+                goal.done ? 'circle-check' : 'target',
+            );
+            row.createSpan({ cls: 'plan-annual-goal-editor-text', text: goal.text });
         }
+        this.positionGoalEditor();
+        input.focus();
     }
 
-    /** 悬浮面板跟随鼠标（位于鼠标上方 12px 居中，收敛在视口内） */
-    private placeGoalTip(clientX: number, clientY: number): void {
-        const tip = this.goalTipEl;
-        if (!tip) return;
-        const width = tip.offsetWidth;
-        const height = tip.offsetHeight;
-        const left = Math.max(8, Math.min(clientX - width / 2, window.innerWidth - width - 8));
-        const top = Math.max(8, clientY - height - 12);
-        tip.style.left = `${left}px`;
-        tip.style.top = `${top}px`;
+    /** 新增目标并自动绑定到格子对应的周，保存后刷新目标区与左侧目标列表 */
+    private addGoalToWeek(text: string, weekKey: string): void {
+        if (!text) return;
+        const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
+        if (!rootTask) return;
+        rootTask.goals = [
+            ...(rootTask.goals ?? []),
+            {
+                id: `goal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                text,
+                createdAt: Date.now(),
+                startWeek: weekKey,
+                endWeek: weekKey,
+            },
+        ];
+        void this.panelOptions.save();
+        this.renderGoalLanes();
+        this.renderGoalList();
+        this.panelOptions.onChanged?.();
+        // 重绘后格子元素已重建，按周键重新定位锚点并刷新浮层，保持连续添加
+        this.goalEditorAnchorEl = Array.from(
+            this.goalEl.querySelectorAll<HTMLElement>('.plan-annual-goal-cell'),
+        ).find((el) => el.dataset.weekKey === weekKey) ?? null;
+        this.renderGoalEditor();
     }
 
-    /** 隐藏悬浮面板 */
-    private hideGoalTip(): void {
-        this.goalTipEl?.remove();
-        this.goalTipEl = null;
-        this.goalTipWeekKey = null;
+    /** 浮层定位：横向对齐格子中心，纵向优先显示在格子上方，空间不足时翻到下方 */
+    private positionGoalEditor(): void {
+        const editor = this.goalEditorEl;
+        const anchor = this.goalEditorAnchorEl;
+        if (!editor || !anchor) return;
+        const rootRect = this.element.getBoundingClientRect();
+        const rect = anchor.getBoundingClientRect();
+        const width = editor.offsetWidth;
+        const height = editor.offsetHeight;
+        const rawLeft = rect.left - rootRect.left + rect.width / 2 - width / 2;
+        const maxLeft = Math.max(8, rootRect.width - width - 8);
+        let top = rect.top - rootRect.top - height - 6;
+        if (top < 8) top = rect.bottom - rootRect.top + 6;
+        editor.style.left = `${Math.min(Math.max(rawLeft, 8), maxLeft)}px`;
+        editor.style.top = `${Math.max(8, top)}px`;
     }
 
     /** 季度导航行：← 2026年 Q2 →（跨年自动切换年份） */
@@ -752,6 +806,7 @@ export class PlanAnnualPanel extends FloatingPanel {
     /** 季度翻页：Q4 向后进入下一年 Q1，Q1 向前回到上一年 Q4 */
     private shiftQuarter(delta: number): void {
         this.cancelDrag();
+        this.closeGoalEditor();
         let quarter = this.quarter + delta;
         let year = this.year;
         if (quarter < 1) {

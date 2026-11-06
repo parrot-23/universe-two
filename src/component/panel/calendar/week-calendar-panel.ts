@@ -1,13 +1,13 @@
 // 周历面板：基于 FloatingPanel 的日历式展示。
 // 结构：顶部窄条一行（第一列为 PLAN/CHECK，其余六列为 ACT），下方一行 × 七列日期格子（周一至周日），
-// 最下方为内容方框：列出该周（年视图周格子）排布的任务，以及祖先任务绑定到该任务的目标。
+// 最下方为内容区：左侧本日目标（当天排布任务及其日目标）、右侧本周排布的任务。
 import { setIcon } from 'obsidian';
 
-import type { PrototypeTask, TaskGoalEntry } from '../../../datatypes/prototype-task';
+import type { PrototypeTask } from '../../../datatypes/prototype-task';
 import { t } from '../../../i18n';
 import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
 import type { PlanCategory } from '../../../shared/plan-category-manager';
-import { getCurrentDayKey, getCurrentWeekKey, makeDayKeyFromWeek } from '../../../shared/plan-data';
+import { getCurrentDayKey, getCurrentWeekKey, getISOWeek, makeDayKeyFromWeek, makeWeekKey } from '../../../shared/plan-data';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 周历面板配置 */
@@ -182,8 +182,60 @@ export class WeekCalendarPanel extends FloatingPanel {
         return lanes.length;
     }
 
-    /** 内容方框：本周（年视图周格子）任务，任务下缩进列出祖先任务绑定到该任务的目标 */
+    /** 底部内容区：左右分栏，左侧本日目标、右侧本周任务 */
     private renderTaskBox(parentEl: HTMLElement): void {
+        const boxes = parentEl.createDiv({ cls: 'week-calendar-boxes' });
+        this.renderDayGoalBox(boxes);
+        this.renderWeekTaskBox(boxes);
+    }
+
+    /** 本日目标方框：列出当天排布的任务，任务下缩进展示该天填写的日目标；没有日目标的任务只显示名称 */
+    private renderDayGoalBox(parentEl: HTMLElement): void {
+        const box = parentEl.createDiv({ cls: 'week-calendar-task-box week-calendar-daygoal-box' });
+        box.createDiv({ cls: 'week-calendar-task-box-title', text: t('panel.weekCalendarDayGoals') });
+
+        const dayKey = this.highlightDayKey ?? getCurrentDayKey();
+        const tasks = this.panelOptions.getTasks?.() ?? [];
+        const byId = new Map(tasks.map((task) => [task.id, task]));
+        const categories = this.panelOptions.getCategories?.() ?? [];
+        // 按日期自身推算所在的周与星期：高亮日期可能不在当前展示的周内，需与工具栏日期保持一致
+        const date = new Date(
+            Number(dayKey.slice(0, 4)),
+            Number(dayKey.slice(5, 7)) - 1,
+            Number(dayKey.slice(8, 10)),
+        );
+        const weekKey = makeWeekKey(date.getFullYear(), getISOWeek(date));
+        const weekday = date.getDay() || 7;
+        const dayTasks = (this.panelOptions.planAssignmentRepo?.dayAssignments(weekKey, weekday) ?? [])
+            .map((assignment) => byId.get(assignment.taskId))
+            .filter((task): task is PrototypeTask => task !== undefined);
+
+        if (dayTasks.length === 0) {
+            box.createDiv({ cls: 'week-calendar-task-empty', text: t('panel.weekCalendarNoDayTask') });
+            return;
+        }
+
+        for (const task of dayTasks) {
+            const item = box.createDiv({ cls: 'week-calendar-task-item' });
+            const head = item.createDiv({ cls: 'week-calendar-task-head' });
+            const dot = head.createSpan({ cls: 'week-calendar-task-dot' });
+            dot.style.background = categories.find((category) => category.id === task.categoryId)?.color
+                ?? '#888888';
+            head.createSpan({ cls: 'week-calendar-task-name', text: task.name });
+            for (const goal of task.dayGoals?.[dayKey] ?? []) {
+                const row = item.createDiv({ cls: 'week-calendar-task-goal week-calendar-day-goal' });
+                if (goal.done) row.addClass('is-done');
+                setIcon(
+                    row.createSpan({ cls: 'week-calendar-task-goal-icon' }),
+                    goal.done ? 'circle-check' : 'circle',
+                );
+                row.createSpan({ cls: 'week-calendar-task-goal-text', text: goal.text });
+            }
+        }
+    }
+
+    /** 本周任务方框：本周（年视图周格子）任务，任务下缩进列出祖先任务绑定到该任务的目标 */
+    private renderWeekTaskBox(parentEl: HTMLElement): void {
         const box = parentEl.createDiv({ cls: 'week-calendar-task-box' });
         box.createDiv({ cls: 'week-calendar-task-box-title', text: t('panel.weekCalendarTasks') });
 
@@ -207,32 +259,6 @@ export class WeekCalendarPanel extends FloatingPanel {
             dot.style.background = categories.find((category) => category.id === task.categoryId)?.color
                 ?? '#888888';
             head.createSpan({ cls: 'week-calendar-task-name', text: task.name });
-            for (const { owner, goal } of this.getBoundAncestorGoals(task, byId)) {
-                const row = item.createDiv({ cls: 'week-calendar-task-goal' });
-                setIcon(row.createSpan({ cls: 'week-calendar-task-goal-icon' }), 'target');
-                row.createSpan({ cls: 'week-calendar-task-goal-owner', text: owner.name });
-                row.createSpan({ cls: 'week-calendar-task-goal-text', text: goal.text });
-            }
         }
-    }
-
-    /** 祖先任务中通过「绑定子任务」绑定了当前任务的目标（由近及远） */
-    private getBoundAncestorGoals(
-        task: PrototypeTask,
-        byId: Map<string, PrototypeTask>,
-    ): { owner: PrototypeTask; goal: TaskGoalEntry }[] {
-        const result: { owner: PrototypeTask; goal: TaskGoalEntry }[] = [];
-        const visited = new Set<string>([task.id]);
-        let parentId = task.parentId;
-        while (parentId && !visited.has(parentId)) {
-            visited.add(parentId);
-            const owner = byId.get(parentId);
-            if (!owner) break;
-            for (const goal of owner.goals ?? []) {
-                if ((goal.subtaskIds ?? []).includes(task.id)) result.push({ owner, goal });
-            }
-            parentId = owner.parentId;
-        }
-        return result;
     }
 }
