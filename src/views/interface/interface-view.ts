@@ -442,10 +442,10 @@ export class InterfaceView {
         this.refreshTaskConsumers();
     }
 
-    /** 删除任务：仅删当前任务（子任务提升为根任务），销毁对应详情面板并刷新列表 */
+    /** 删除任务：连同其所有后代任务一并删除，销毁对应详情面板并刷新列表 */
     private deletePrototypeTask(taskId: string): void {
-        this.prototypeTaskRepo.remove(taskId);
-        this.destroyTaskDetail(taskId);
+        const removedIds = this.prototypeTaskRepo.remove(taskId);
+        for (const id of removedIds) this.destroyTaskDetail(id);
         void (this.plugin as Plugin & { saveAll: () => Promise<void> }).saveAll();
         this.refreshTaskConsumers();
     }

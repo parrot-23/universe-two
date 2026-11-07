@@ -52,15 +52,23 @@ export class PrototypeTaskRepo {
         if (task) task.archived = undefined;
     }
 
-    /** 删除任务：仅删除当前任务，其子任务提升为根任务 */
-    remove(taskId: string): void {
+    /** 删除任务：连同其所有后代任务一并删除，返回被删除的任务 id 列表 */
+    remove(taskId: string): string[] {
         const all = this.allTasks;
-        const index = all.findIndex((item) => item.id === taskId);
-        if (index < 0) return;
-        all.splice(index, 1);
-        for (const task of all) {
-            if (task.parentId === taskId) task.parentId = undefined;
+        if (!all.some((item) => item.id === taskId)) return [];
+        const removedIds = new Set<string>();
+        const collect = (id: string): void => {
+            if (removedIds.has(id)) return;
+            removedIds.add(id);
+            for (const task of all) {
+                if (task.parentId === id) collect(task.id);
+            }
+        };
+        collect(taskId);
+        for (let i = all.length - 1; i >= 0; i -= 1) {
+            if (removedIds.has(all[i].id)) all.splice(i, 1);
         }
+        return Array.from(removedIds);
     }
 
     /** 更新任务名称 / 描述 / 分类 / 类型（任务不存在时忽略） */

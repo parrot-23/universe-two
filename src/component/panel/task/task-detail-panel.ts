@@ -7,6 +7,7 @@ import type { ChecklistItem } from '../../../datatypes/domain';
 import type { PrototypeTask, TaskDayGoalEntry } from '../../../datatypes/prototype-task';
 import { getLang, t } from '../../../i18n';
 import type { PlanCategoryData } from '../../../shared/plan-category-manager';
+import { UNCATEGORIZED_CATEGORY_ID } from '../../../shared/plan-category-manager';
 import {
     getCurrentDayKey,
     getCurrentWeekKey,
@@ -16,7 +17,7 @@ import {
 } from '../../../shared/plan-data';
 import { buildTaskFileName, listTaskFiles, relativeToDir } from '../../../shared/task-file';
 import { ensureTaskFileDir, revealFolderInExplorer } from '../../../shared/task-library';
-import { ConfirmModal } from '../../ob/confirm-modal';
+import { applyThemeColors, getCurrentThemeColors } from '../../../themestory/theme-colors';
 import { FileEditorPanel } from '../basic/file-editor-panel';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
@@ -98,6 +99,20 @@ export class TaskDetailPanel extends FloatingPanel {
     private settingPanelEl!: HTMLElement;
     /** 当前激活的设置面板类型 */
     private settingActive: 'form' | null = null;
+    /** 删除确认浮层（点击删除按钮时显示在按钮上方） */
+    private deleteConfirmEl: HTMLElement | null = null;
+    /** 删除确认浮层的点击外部关闭回调 */
+    private deleteConfirmOutsideHandler?: (evt: MouseEvent) => void;
+    /** 删除确认浮层的 Esc 关闭回调 */
+    private deleteConfirmEscapeHandler?: (evt: KeyboardEvent) => void;
+    /** 分类下拉浮层 */
+    private categoryMenuEl: HTMLElement | null = null;
+    /** 分类下拉浮层的锚点（分类行） */
+    private categoryMenuAnchor: HTMLElement | null = null;
+    /** 分类下拉浮层的点击外部关闭回调 */
+    private categoryMenuOutsideHandler?: (evt: MouseEvent) => void;
+    /** 分类下拉浮层的 Esc 关闭回调 */
+    private categoryMenuEscapeHandler?: (evt: KeyboardEvent) => void;
     /** 右侧容器（切换左侧选中任务时整体重建） */
     private rightEl!: HTMLElement;
     /** 当前选中的归属分区索引（切换任务后保持不变） */
@@ -135,6 +150,20 @@ export class TaskDetailPanel extends FloatingPanel {
         if (this.filesBodyEl?.isConnected) this.renderFiles(this.filesBodyEl);
         this.renderSettingPanel();
         super.open();
+    }
+
+    /** 关闭面板时一并关闭删除确认浮层与分类下拉浮层（均挂在 body 上，需手动移除） */
+    override close(): void {
+        this.closeDeleteConfirm();
+        this.closeCategoryMenu();
+        super.close();
+    }
+
+    /** 销毁面板时一并清理浮层 */
+    override destroy(): void {
+        this.closeDeleteConfirm();
+        this.closeCategoryMenu();
+        super.destroy();
     }
 
     /** 刷新全量任务并重绘任务树 */
@@ -272,6 +301,8 @@ export class TaskDetailPanel extends FloatingPanel {
 
     /** 重建右侧内容：任务信息行 + 归属分区选项卡 + 底部设置面板 */
     private renderRightPane(): void {
+        this.closeDeleteConfirm();
+        this.closeCategoryMenu();
         const right = this.rightEl;
         right.empty();
         this.tabs = [];
@@ -308,14 +339,18 @@ export class TaskDetailPanel extends FloatingPanel {
             cls: 'task-detail-category-name',
             text: category?.label ?? t('defaultCategory.uncategorized'),
         });
-        const categoryEdit = categoryRow.createSpan({ cls: 'task-detail-edit-icon' });
-        setIcon(categoryEdit, 'pencil');
-        categoryEdit.setAttribute('aria-label', 'Edit');
-        categoryEdit.addEventListener('click', () => this.startCategoryEdit(dotEl, categoryNameEl));
+        const categoryArrow = categoryRow.createSpan({ cls: 'task-detail-category-arrow' });
+        setIcon(categoryArrow, 'chevron-down');
+        categoryRow.addEventListener('click', (evt) => {
+            evt.stopPropagation();
+            this.toggleCategoryMenu(categoryRow, dotEl, categoryNameEl);
+        });
 
         const headActions = headBlock.createDiv({ cls: 'task-detail-head-actions' });
         this.createHeadAction(headActions, 'archive', t('common.archive'), false, () => this.archiveTask());
-        this.createHeadAction(headActions, 'trash-2', t('common.delete'), true, () => this.confirmDeleteTask());
+        const deleteBtn = this.createHeadAction(headActions, 'trash-2', t('common.delete'), true, () =>
+            this.openDeleteConfirm(deleteBtn),
+        );
 
         // 第三行：任务描述 + 编辑图标（单行，溢出省略）
         const descRow = right.createDiv({ cls: 'task-detail-desc-row' });
@@ -380,7 +415,7 @@ export class TaskDetailPanel extends FloatingPanel {
         label: string,
         danger: boolean,
         onClick: () => void,
-    ): void {
+    ): HTMLButtonElement {
         const button = parent.createEl('button', {
             cls: `task-detail-head-action${danger ? ' is-danger' : ''}`,
             attr: { type: 'button', 'aria-label': label },
@@ -388,6 +423,7 @@ export class TaskDetailPanel extends FloatingPanel {
         setIcon(button.createSpan({ cls: 'task-detail-head-action-icon' }), icon);
         button.createSpan({ cls: 'task-detail-head-action-label', text: label });
         button.addEventListener('click', onClick);
+        return button;
     }
 
     /** 归档当前任务：写完仓库后关闭面板 */
@@ -396,17 +432,74 @@ export class TaskDetailPanel extends FloatingPanel {
         this.close();
     }
 
-    /** 删除当前任务：确认后删除并关闭面板 */
-    private confirmDeleteTask(): void {
-        new ConfirmModal(
-            this.panelOptions.app,
-            t('panel.deleteTaskTitle'),
-            t('panel.deleteTaskDetail', { name: this.task.name }),
-            () => {
-                this.panelOptions.onDeleteTask?.(this.task.id);
-                this.close();
-            },
-        ).open();
+    /** 在删除按钮上方打开删除确认浮层（点击确认后连同后代任务一并删除） */
+    private openDeleteConfirm(anchor: HTMLElement): void {
+        this.closeDeleteConfirm();
+        const tip = document.body.createDiv({ cls: 'task-detail-delete-confirm' });
+        this.deleteConfirmEl = tip;
+        tip.createDiv({
+            cls: 'task-detail-delete-confirm-text',
+            text: t('panel.deleteTaskDetail', { name: this.task.name }),
+        });
+        const actions = tip.createDiv({ cls: 'task-detail-delete-confirm-actions' });
+        const cancelBtn = actions.createEl('button', {
+            text: t('settings.cancel'),
+            attr: { type: 'button' },
+        });
+        cancelBtn.addEventListener('click', () => this.closeDeleteConfirm());
+        const confirmBtn = actions.createEl('button', {
+            cls: 'mod-warning',
+            text: t('settings.confirm'),
+            attr: { type: 'button' },
+        });
+        confirmBtn.addEventListener('click', () => {
+            this.closeDeleteConfirm();
+            this.panelOptions.onDeleteTask?.(this.task.id);
+            this.close();
+        });
+        this.positionDeleteConfirm(anchor);
+        this.deleteConfirmOutsideHandler = (evt: MouseEvent) => {
+            const target = evt.target as Node | null;
+            if (target && (tip.contains(target) || anchor.contains(target))) return;
+            this.closeDeleteConfirm();
+        };
+        this.deleteConfirmEscapeHandler = (evt: KeyboardEvent) => {
+            if (evt.key !== 'Escape') return;
+            // 先关闭浮层，避免同时关闭整个面板
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.closeDeleteConfirm();
+        };
+        document.addEventListener('mousedown', this.deleteConfirmOutsideHandler, true);
+        document.addEventListener('keydown', this.deleteConfirmEscapeHandler, true);
+    }
+
+    /** 定位删除确认浮层：优先显示在按钮上方，空间不足时翻到下方 */
+    private positionDeleteConfirm(anchor: HTMLElement): void {
+        const tip = this.deleteConfirmEl;
+        if (!tip) return;
+        const rect = anchor.getBoundingClientRect();
+        const width = tip.offsetWidth;
+        const height = tip.offsetHeight;
+        const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+        let top = rect.top - height - 6;
+        if (top < 8) top = rect.bottom + 6;
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+    }
+
+    /** 关闭删除确认浮层（移除元素与 document 监听） */
+    private closeDeleteConfirm(): void {
+        if (this.deleteConfirmOutsideHandler) {
+            document.removeEventListener('mousedown', this.deleteConfirmOutsideHandler, true);
+            this.deleteConfirmOutsideHandler = undefined;
+        }
+        if (this.deleteConfirmEscapeHandler) {
+            document.removeEventListener('keydown', this.deleteConfirmEscapeHandler, true);
+            this.deleteConfirmEscapeHandler = undefined;
+        }
+        this.deleteConfirmEl?.remove();
+        this.deleteConfirmEl = null;
     }
 
     /** 创建左侧工具栏按钮（图标 + 文字） */
@@ -692,51 +785,89 @@ export class TaskDetailPanel extends FloatingPanel {
         this.activeInlineEditAbort = () => finish(false);
     }
 
-    /** 就地编辑分类：分类名称位置换成下拉框，选择后保存；Esc 取消 */
-    private startCategoryEdit(dotEl: HTMLElement, nameEl: HTMLElement): void {
+    /** 切换分类下拉浮层：点击分类行展开，再次点击收起 */
+    private toggleCategoryMenu(anchor: HTMLElement, dotEl: HTMLElement, nameEl: HTMLElement): void {
+        if (this.categoryMenuEl && this.categoryMenuAnchor === anchor) {
+            this.closeCategoryMenu();
+            return;
+        }
+        this.closeCategoryMenu();
         const categories = this.panelOptions.categoryData?.categories ?? [];
         if (categories.length === 0) return;
-        const currentId = this.task.categoryId
-            && categories.some((item) => item.id === this.task.categoryId)
-            ? this.task.categoryId
-            : '';
-        const previousLabel = nameEl.textContent ?? '';
 
-        nameEl.empty();
-        const select = nameEl.createEl('select', { cls: 'dropdown task-detail-category-select' });
+        const menu = document.body.createDiv({ cls: 'task-detail-category-menu' });
+        applyThemeColors(menu, getCurrentThemeColors());
+        this.categoryMenuEl = menu;
+        this.categoryMenuAnchor = anchor;
+        anchor.addClass('is-open');
+        const currentId = this.task.categoryId ?? UNCATEGORIZED_CATEGORY_ID;
         for (const category of categories) {
-            const option = select.createEl('option', { text: category.label });
-            option.value = category.id;
+            const item = menu.createDiv({ cls: 'task-detail-category-item' });
+            item.toggleClass('is-active', category.id === currentId);
+            const itemDot = item.createSpan({ cls: 'task-detail-category-dot' });
+            itemDot.style.background = category.color ?? '#888888';
+            item.createSpan({ cls: 'task-detail-category-name', text: category.label });
+            item.addEventListener('click', (evt) => {
+                evt.stopPropagation();
+                this.closeCategoryMenu();
+                this.applyTaskCategory(category.id, dotEl, nameEl);
+            });
         }
-        select.value = currentId;
-        select.focus();
 
-        let finished = false;
-        const finish = (commit: boolean): void => {
-            if (finished) return;
-            finished = true;
-            this.activeInlineEditAbort = null;
-            const value = select.value;
-            const category = categories.find((item) => item.id === value);
-            nameEl.empty();
-            if (!commit || value === currentId) {
-                nameEl.setText(previousLabel);
-                return;
-            }
-            this.task.categoryId = value || undefined;
-            const target = this.tasks.find((item) => item.id === this.task.id);
-            if (target) target.categoryId = this.task.categoryId;
-            dotEl.style.background = category?.color ?? '#888888';
-            nameEl.setText(category?.label ?? t('defaultCategory.uncategorized'));
-            this.panelOptions.onUpdateTask?.(this.task.id, { categoryId: value });
+        // 贴在分类行下方，右侧空间不足时向左收敛（宽度随内容自适应）
+        const rect = anchor.getBoundingClientRect();
+        const width = menu.offsetWidth;
+        const height = menu.offsetHeight;
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+        const top = rect.bottom + height > window.innerHeight - 8
+            ? Math.max(8, rect.top - height - 4)
+            : rect.bottom + 4;
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+
+        this.categoryMenuOutsideHandler = (evt: MouseEvent) => {
+            const target = evt.target as Node | null;
+            if (target && (menu.contains(target) || anchor.contains(target))) return;
+            this.closeCategoryMenu();
         };
+        this.categoryMenuEscapeHandler = (evt: KeyboardEvent) => {
+            if (evt.key !== 'Escape') return;
+            // 先关闭下拉，避免同时关闭整个面板
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.closeCategoryMenu();
+        };
+        document.addEventListener('mousedown', this.categoryMenuOutsideHandler, true);
+        document.addEventListener('keydown', this.categoryMenuEscapeHandler, true);
+    }
 
-        select.addEventListener('change', () => finish(true));
-        select.addEventListener('blur', () => finish(true));
-        select.addEventListener('keydown', (evt) => {
-            if (evt.key === 'Escape') finish(false);
-        });
-        this.activeInlineEditAbort = () => finish(false);
+    /** 选中分类：更新任务分类、分类行圆点与名称，并写回仓库 */
+    private applyTaskCategory(categoryId: string, dotEl: HTMLElement, nameEl: HTMLElement): void {
+        if (categoryId === (this.task.categoryId ?? UNCATEGORIZED_CATEGORY_ID)) return;
+        const categories = this.panelOptions.categoryData?.categories ?? [];
+        const category = categories.find((item) => item.id === categoryId);
+        this.task.categoryId = categoryId;
+        const target = this.tasks.find((item) => item.id === this.task.id);
+        if (target) target.categoryId = categoryId;
+        dotEl.style.background = category?.color ?? '#888888';
+        nameEl.setText(category?.label ?? t('defaultCategory.uncategorized'));
+        this.panelOptions.onUpdateTask?.(this.task.id, { categoryId });
+    }
+
+    /** 关闭分类下拉浮层（移除元素与 document 监听） */
+    private closeCategoryMenu(): void {
+        if (this.categoryMenuOutsideHandler) {
+            document.removeEventListener('mousedown', this.categoryMenuOutsideHandler, true);
+            this.categoryMenuOutsideHandler = undefined;
+        }
+        if (this.categoryMenuEscapeHandler) {
+            document.removeEventListener('keydown', this.categoryMenuEscapeHandler, true);
+            this.categoryMenuEscapeHandler = undefined;
+        }
+        if (this.categoryMenuAnchor?.isConnected) this.categoryMenuAnchor.removeClass('is-open');
+        this.categoryMenuAnchor = null;
+        this.categoryMenuEl?.remove();
+        this.categoryMenuEl = null;
     }
 
     /** 各分区条目数量（清单为未完成数） */
