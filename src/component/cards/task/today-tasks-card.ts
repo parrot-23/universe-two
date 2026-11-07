@@ -200,6 +200,8 @@ export class TodayTasksCard {
             event.stopPropagation();
             this.abandonRunningTask();
         });
+        // 日目标放在条目末尾：换行后独占第二行，不影响第一行的按钮组位置
+        this.appendDayGoals(row, task, makeDayKey(this.selectedDate), true);
 
         this.startRunningTicker(running.startedAt);
     }
@@ -339,6 +341,8 @@ export class TodayTasksCard {
                         this.renderContent();
                     });
                 }
+                // 日目标放在条目末尾：换行后独占第二行，不影响第一行的按钮组位置
+                this.appendDayGoals(row, task, dayKey);
             }
         }
         // 额外任务：展开后列表末尾显示「新增任务」+ 按钮
@@ -352,6 +356,19 @@ export class TodayTasksCard {
                 event.stopPropagation();
                 onAdd();
             });
+        }
+    }
+
+    /** 当天日目标：追加到条目末尾，换行后与任务名称左对齐并缩进显示（已完成置灰加删除线） */
+    private appendDayGoals(row: HTMLElement, task: PrototypeTask, dayKey: string, plainRow = false): void {
+        for (const goal of task.dayGoals?.[dayKey] ?? []) {
+            const line = row.createDiv({
+                cls: `interface-today-tasks-item-daygoal${plainRow ? ' is-plain' : ''}`,
+            });
+            line.toggleClass('is-done', goal.done === true);
+            const iconEl = line.createSpan({ cls: 'interface-today-tasks-item-daygoal-icon' });
+            setIcon(iconEl, 'target');
+            line.createSpan({ cls: 'interface-today-tasks-item-daygoal-text', text: goal.text });
         }
     }
 

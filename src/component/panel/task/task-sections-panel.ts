@@ -114,20 +114,25 @@ export class TaskSectionsPanel extends FloatingPanel {
         }
     }
 
-    /** 第一行：任务名称 + 任务分类 */
+    /** 第一行：任务名称 + 任务分类；第二行：任务描述（未填写时不占位） */
     private renderHead(body: HTMLElement, task: PrototypeTask): void {
         const head = body.createDiv({ cls: 'task-sections-head' });
-        head.createDiv({ cls: 'task-sections-name', text: task.name });
+        const titleRow = head.createDiv({ cls: 'task-sections-title-row' });
+        titleRow.createDiv({ cls: 'task-sections-name', text: task.name });
         const category = task.categoryId
             ? this.sectionsOptions.categories.find((item) => item.id === task.categoryId)
             : undefined;
-        const pill = head.createDiv({ cls: 'task-sections-category' });
+        const pill = titleRow.createDiv({ cls: 'task-sections-category' });
         const dot = pill.createSpan({ cls: 'task-sections-category-dot' });
         dot.style.background = category?.color ?? '#888888';
         pill.createSpan({
             cls: 'task-sections-category-label',
             text: category?.label ?? t('defaultCategory.uncategorized'),
         });
+        const description = (task.description ?? '').trim();
+        if (description) {
+            head.createDiv({ cls: 'task-sections-description', text: description });
+        }
     }
 
     /** 第二行：板块选项卡（清单为空时「任务文件」排到第一位） */
