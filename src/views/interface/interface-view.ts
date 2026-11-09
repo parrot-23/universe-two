@@ -13,6 +13,8 @@ import type { PrototypeTask, PrototypeTaskType } from '../../datatypes/prototype
 import { t } from '../../i18n';
 import { AchievementPanel } from '../../component/panel/achievement/achievement-panel';
 import { CardPickerPanel } from '../../component/panel/interface/card-picker-panel';
+import { FunctionPanel, type FunctionItemId } from '../../component/panel/interface/function-panel';
+import type { FloatingPanel } from '../../component/panel/basic/floating-panel';
 import { CheckPanel } from '../../component/panel/check/check-panel';
 import { CollectPanel } from '../../component/panel/collect/collect-panel';
 import { DataPanel } from '../../component/panel/check/data-panel';
@@ -99,6 +101,8 @@ export class InterfaceView {
     private editMode = false;
     /** 卡片选择面板 */
     private cardPickerPanel: CardPickerPanel | null = null;
+    /** 功能面板（顶部工具栏「功能」图标入口） */
+    private functionPanel: FunctionPanel | null = null;
     /** 主题管理面板 */
     private themePanel: ThemePanel | null = null;
     /** 当前主题的动画清理函数（重绘前调用，停止 Canvas 动画） */
@@ -222,6 +226,13 @@ export class InterfaceView {
 
     /** 点击任务卡片：打开任务面板 */
     private openTaskPanel(): void {
+        const panel = this.ensureTaskPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 任务面板实例（懒创建，打开前同步根任务列表） */
+    private ensureTaskPanel(): TaskPanel {
         if (!this.taskPanel) {
             this.taskPanel = new TaskPanel({
                 container: this.panelContainer,
@@ -236,11 +247,18 @@ export class InterfaceView {
         } else {
             this.taskPanel.setTasks(this.rootPrototypeTasks());
         }
-        this.taskPanel.open();
+        return this.taskPanel;
     }
 
     /** 点击时间盒卡片：打开时间盒面板 */
     private openTimeBoxPanel(): void {
+        const panel = this.ensureTimeBoxPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 时间盒面板实例（懒创建） */
+    private ensureTimeBoxPanel(): TimeBoxPanel {
         if (!this.timeBoxPanel) {
             const holder = this.plugin as Plugin & {
                 timeBoxRepo: ConstructorParameters<typeof TimeBoxPanel>[0]['timeBoxRepo'];
@@ -255,11 +273,18 @@ export class InterfaceView {
                 save: () => holder.saveAll(),
             });
         }
-        this.timeBoxPanel.open();
+        return this.timeBoxPanel;
     }
 
     /** 点击习惯卡片：打开习惯面板 */
     private openHabitPanel(): void {
+        const panel = this.ensureHabitPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 习惯面板实例（懒创建） */
+    private ensureHabitPanel(): HabitPanel {
         if (!this.habitPanel) {
             const holder = this.plugin as Plugin & {
                 saveAll: () => Promise<void>;
@@ -281,11 +306,18 @@ export class InterfaceView {
                 },
             });
         }
-        this.habitPanel.open();
+        return this.habitPanel;
     }
 
     /** 点击计划年度卡片：打开计划年度面板 */
     private openPlanAnnualPanel(): void {
+        const panel = this.ensurePlanAnnualPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 计划年度面板实例（懒创建） */
+    private ensurePlanAnnualPanel(): PlanAnnualPanel {
         if (!this.planAnnualPanel) {
             const holder = this.plugin as Plugin & {
                 planAssignmentRepo: ConstructorParameters<typeof PlanAnnualPanel>[0]['planAssignmentRepo'];
@@ -309,11 +341,18 @@ export class InterfaceView {
                 },
             });
         }
-        this.planAnnualPanel.open();
+        return this.planAnnualPanel;
     }
 
     /** 点击计划一周卡片：打开计划一周面板 */
     private openPlanWeekPanel(): void {
+        const panel = this.ensurePlanWeekPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 计划一周面板实例（懒创建） */
+    private ensurePlanWeekPanel(): PlanWeekPanel {
         if (!this.planWeekPanel) {
             const holder = this.plugin as Plugin & {
                 planAssignmentRepo: ConstructorParameters<typeof PlanWeekPanel>[0]['planAssignmentRepo'];
@@ -333,11 +372,18 @@ export class InterfaceView {
                 },
             });
         }
-        this.planWeekPanel.open();
+        return this.planWeekPanel;
     }
 
     /** 点击检查卡片：打开检查面板 */
     private openCheckPanel(): void {
+        const panel = this.ensureCheckPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 检查面板实例（懒创建） */
+    private ensureCheckPanel(): CheckPanel {
         if (!this.checkPanel) {
             const holder = this.plugin as Plugin & {
                 timeBoxRepo: ConstructorParameters<typeof CheckPanel>[0]['timeBoxRepo'];
@@ -352,28 +398,50 @@ export class InterfaceView {
                 onOpenData: () => this.openDataPanel(),
             });
         }
-        this.checkPanel.open();
+        return this.checkPanel;
     }
 
     /** 点击收集卡片：打开收集面板（内容复用 GTD 收集视图） */
     private openCollectPanel(): void {
-        const holder = this.plugin as Plugin & {
-            gtdRepo: ConstructorParameters<typeof CollectPanel>[0]['gtdRepo'];
-            saveAll: () => Promise<void>;
-        };
-        this.collectPanel ??= new CollectPanel({
-            container: this.panelContainer,
-            gtdRepo: holder.gtdRepo,
-            save: () => holder.saveAll(),
-            getTasks: () => this.prototypeTaskRepo.tasks,
-        });
-        this.collectPanel.open();
+        const panel = this.ensureCollectPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 收集面板实例（懒创建） */
+    private ensureCollectPanel(): CollectPanel {
+        if (!this.collectPanel) {
+            const holder = this.plugin as Plugin & {
+                gtdRepo: ConstructorParameters<typeof CollectPanel>[0]['gtdRepo'];
+                saveAll: () => Promise<void>;
+            };
+            this.collectPanel = new CollectPanel({
+                container: this.panelContainer,
+                gtdRepo: holder.gtdRepo,
+                save: () => holder.saveAll(),
+                getTasks: () => this.prototypeTaskRepo.tasks,
+            });
+        }
+        return this.collectPanel;
     }
 
     /** 点击画廊卡片：打开画廊面板 */
     private openGalleryPanel(): void {
+        const panel = this.ensureGalleryPanel();
+        this.prepareForFloating(panel);
+        panel.open();
+    }
+
+    /** 画廊面板实例（懒创建） */
+    private ensureGalleryPanel(): GalleryPanel {
         this.galleryPanel ??= new GalleryPanel({ container: this.panelContainer });
-        this.galleryPanel.open();
+        return this.galleryPanel;
+    }
+
+    /** 面板若正嵌入在功能面板中，先从功能面板退出嵌入以便以浮层打开 */
+    private prepareForFloating(panel: FloatingPanel): void {
+        if (!panel.isEmbedded) return;
+        this.functionPanel?.releasePanel(panel);
     }
 
     /** 点击成就榜单卡片：打开成就榜单面板 */
@@ -390,6 +458,14 @@ export class InterfaceView {
 
     /** 打开任务详情面板（同一任务复用实例，已打开时置顶） */
     private openTaskDetail(task: PrototypeTask): TaskDetailPanel {
+        const panel = this.ensureTaskDetailPanel(task);
+        this.prepareForFloating(panel);
+        panel.open();
+        return panel;
+    }
+
+    /** 任务详情面板实例（同一任务复用，创建或刷新任务列表） */
+    private ensureTaskDetailPanel(task: PrototypeTask): TaskDetailPanel {
         let panel = this.detailPanels.get(task.id);
         if (!panel) {
             panel = new TaskDetailPanel({
@@ -418,7 +494,6 @@ export class InterfaceView {
         } else {
             panel.setTasks(this.prototypeTaskRepo.tasks);
         }
-        panel.open();
         return panel;
     }
 
@@ -686,6 +761,42 @@ export class InterfaceView {
 
         const dispose = theme.mount(container, { app: this.app, pluginDir: this.pluginDir });
         this.themeDispose = typeof dispose === 'function' ? dispose : null;
+    }
+
+    /** 打开功能面板（顶部工具栏「功能」图标入口）：两级菜单 + 内容区直接嵌入各功能面板 */
+    openFunctionPanel(): void {
+        this.functionPanel ??= new FunctionPanel({
+            container: this.panelContainer,
+            getTasks: () => this.rootPrototypeTasks(),
+            resolvePanel: (item, task) => this.resolveFunctionPanel(item, task),
+        });
+        this.functionPanel.open();
+    }
+
+    /** 功能面板内要嵌入的面板实例（任务详情按任务解析） */
+    private resolveFunctionPanel(item: FunctionItemId, task?: PrototypeTask): FloatingPanel | null {
+        switch (item) {
+            case 'task':
+                return this.ensureTaskPanel();
+            case 'taskDetail':
+                return task ? this.ensureTaskDetailPanel(task) : null;
+            case 'habit':
+                return this.ensureHabitPanel();
+            case 'timeBox':
+                return this.ensureTimeBoxPanel();
+            case 'planAnnual':
+                return this.ensurePlanAnnualPanel();
+            case 'planWeek':
+                return this.ensurePlanWeekPanel();
+            case 'check':
+                return this.ensureCheckPanel();
+            case 'collect':
+                return this.ensureCollectPanel();
+            case 'gallery':
+                return this.ensureGalleryPanel();
+            default:
+                return null;
+        }
     }
 
     /** 打开卡片选择面板 */

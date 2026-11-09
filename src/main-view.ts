@@ -89,6 +89,7 @@ export class MainView extends ItemView implements ThemeColorsConsumer {
             onDateChange: (date) => this.interfaceView.setSelectedDate(date),
             onOpenCalendar: (date) => this.interfaceView.openDatePanel(date),
             onOpenGoalPanel: () => this.interfaceView.openGoalPanel(),
+            onOpenFunctionPanel: () => this.interfaceView.openFunctionPanel(),
             onOpenSettings: () => this.openSettingsPanel(),
             onOpenHelp: () => this.openHelpModal(),
         });

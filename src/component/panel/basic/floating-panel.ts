@@ -74,6 +74,8 @@ export class FloatingPanel {
     private bodyEl: HTMLElement;
     private options: FloatingPanelOptions;
     private opened = false;
+    /** 嵌入模式挂载容器（null 表示普通浮层模式） */
+    private embeddedHost: HTMLElement | null = null;
     /** 是否已钉住（钉住后点击面板外不再关闭） */
     private pinned = false;
     /** 标题栏钉住按钮（仅在 pinnable 时创建） */
@@ -181,6 +183,31 @@ export class FloatingPanel {
         return this.opened;
     }
 
+    /** 是否处于嵌入模式（作为内联内容铺满容器） */
+    get isEmbedded(): boolean {
+        return this.embeddedHost !== null;
+    }
+
+    /**
+     * 嵌入到指定容器：根节点改为铺满容器的普通内容块，并隐藏自带标题栏。
+     * 之后仍用 open() 激活（各面板的打开逻辑与定时器依赖它），关闭用 close()。
+     */
+    embed(container: HTMLElement): void {
+        this.embeddedHost = container;
+        this.root.addClass('is-embedded');
+        this.root.removeClass('is-absolute');
+        container.appendChild(this.root);
+    }
+
+    /** 退出嵌入模式：根节点放回原来的浮层挂载容器，恢复浮动定位与尺寸 */
+    unembed(): void {
+        if (!this.embeddedHost) return;
+        this.embeddedHost = null;
+        this.root.removeClass('is-embedded');
+        if (!this.hostIsBody) this.root.addClass('is-absolute');
+        this.host.appendChild(this.root);
+    }
+
     /** 面板根元素（供其它面板登记为「内部元素」） */
     get element(): HTMLElement {
         return this.root;
@@ -247,11 +274,13 @@ export class FloatingPanel {
     /** 打开面板（首次打开时居中，之后保留上次拖动位置；已打开时调用视为置顶） */
     open(): void {
         if (this.opened) {
-            this.bringToFront();
+            if (!this.isEmbedded) this.bringToFront();
             return;
         }
         this.opened = true;
         this.root.style.display = 'flex';
+        // 嵌入模式：作为内容块显示，不居中、不置顶、不注册 Esc / 失焦关闭
+        if (this.isEmbedded) return;
         if (this.left === null || this.top === null) {
             this.center();
         } else {
@@ -285,6 +314,8 @@ export class FloatingPanel {
         document.removeEventListener('keydown', this.onKeyDown);
         document.removeEventListener('mousedown', this.onOutsidePointerDown, true);
         this.opened = false;
+        // 嵌入中的面板被销毁时不再退回原容器，避免把已移除的节点重新挂回
+        this.embeddedHost = null;
         this.root.remove();
     }
 

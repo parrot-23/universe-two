@@ -23,6 +23,8 @@ export interface TopBarOptions {
     onDateChange?: (date: Date) => void;
     /** 点击周历按钮（传入当前选中日期） */
     onOpenCalendar?: (date: Date) => void;
+    /** 点击功能面板按钮（位于任务目标按钮左侧） */
+    onOpenFunctionPanel?: () => void;
     /** 点击任务目标按钮（位于周历按钮左侧） */
     onOpenGoalPanel?: () => void;
     /** 点击设置按钮 */
@@ -62,6 +64,14 @@ export class TopBar {
         // 左侧占位：保证日期区（含功能按钮组）落在 grid 中间列，整组居中
         bar.createDiv({ cls: 'parrot-plan-topbar-spacer' });
         const dateBar = bar.createDiv({ cls: 'parrot-plan-topbar-date' });
+
+        // 功能面板按钮：位于任务目标按钮左侧
+        const functionBtn = dateBar.createEl('button', {
+            cls: 'parrot-plan-topbar-calendar-btn',
+            attr: { 'aria-label': t('interface.functionPanel') },
+        });
+        setIcon(functionBtn, 'layout-grid');
+        functionBtn.onclick = () => this.options.onOpenFunctionPanel?.();
 
         // 任务目标按钮：位于周历按钮左侧
         const goalBtn = dateBar.createEl('button', {

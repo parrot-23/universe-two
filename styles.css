@@ -7038,6 +7038,183 @@ button.swimlane-section-card-settings {
     height: 15px;
 }
 
+/* 功能面板：两级菜单 + 内容区 */
+.interface-function-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.interface-function-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.interface-function-group-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.interface-function-group-tab {
+    padding: 4px 14px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.interface-function-group-tab:hover {
+    background: var(--sdt-interactive-hover, var(--interactive-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-function-group-tab.is-active {
+    border-color: var(--sdt-accent, var(--interactive-accent));
+    background: var(--sdt-interactive-bg, var(--interactive-normal));
+    color: var(--sdt-text-primary, var(--text-normal));
+    font-weight: 600;
+}
+
+.interface-function-item-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.interface-function-item-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.interface-function-item-tab:hover {
+    background: var(--sdt-interactive-hover, var(--interactive-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-function-item-tab.is-active {
+    border-color: var(--sdt-accent, var(--interactive-accent));
+    background: var(--sdt-interactive-bg, var(--interactive-normal));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-function-item-tab-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.interface-function-item-tab-icon .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.interface-function-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: min(560px, calc(100vh - 260px));
+    min-height: 240px;
+    overflow: hidden;
+}
+
+/* 嵌入宿主：功能面板铺满该区域，内部滚动由各面板自身负责 */
+.interface-function-embed-host {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.interface-function-embed-host > .floating-panel.is-embedded {
+    min-height: 100%;
+}
+
+/* 任务详情嵌入时的顶部行 */
+.interface-function-detail-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+.interface-function-detail-back {
+    padding: 3px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.interface-function-detail-back:hover {
+    background: var(--sdt-interactive-hover, var(--interactive-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-function-detail-name {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.interface-function-hint {
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.interface-function-task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.interface-function-task-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.interface-function-task-row:hover {
+    background: var(--sdt-interactive-hover, var(--interactive-hover));
+}
+
+.interface-function-task-name {
+    font-size: 13px;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.interface-function-task-desc {
+    overflow: hidden;
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 /* 按钮之间的短竖线（仅编辑模式显示） */
 .interface-tool-divider {
     display: none;
@@ -13534,6 +13711,31 @@ body.plan-annual-dragging {
     position: absolute;
     max-width: none;
     max-height: none;
+}
+
+/* 嵌入模式：铺满所在容器、隐藏自带标题栏（保留相对定位供面板内部浮层定位） */
+.floating-panel.is-embedded {
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    height: 100%;
+    z-index: auto !important;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    overflow: visible;
+}
+
+.floating-panel.is-embedded > .floating-panel-header {
+    display: none;
+}
+
+.floating-panel.is-embedded > .floating-panel-body {
+    padding: 0;
 }
 
 /* 文件编辑面板：内部嵌入原生编辑器，右键菜单 / 补全等浮层挂在 body 上（层级低于面板），
