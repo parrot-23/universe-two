@@ -197,6 +197,15 @@ export class PlanAnnualPanel extends FloatingPanel {
     private goalEditorOutsideHandler: ((evt: MouseEvent) => void) | null = null;
     private goalEditorKeyHandler: ((evt: KeyboardEvent) => void) | null = null;
 
+    /** 本周描述悬浮面板（挂在面板根节点内） */
+    private weekGoalTipEl: HTMLElement | null = null;
+    /** 悬浮面板内容对应的键（任务 id + 周键） */
+    private weekGoalTipKey: string | undefined;
+    /** 本周描述编辑面板（挂在面板根节点内） */
+    private weekGoalEditorEl: HTMLElement | null = null;
+    private weekGoalEditorOutsideHandler: ((evt: MouseEvent) => void) | null = null;
+    private weekGoalEditorKeyHandler: ((evt: KeyboardEvent) => void) | null = null;
+
     /** 点击下拉列表外关闭 */
     private readonly onStatusMenuOutside = (evt: MouseEvent): void => {
         const target = evt.target;
@@ -246,6 +255,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.cancelDrag();
         this.closeStatusMenu();
         this.closeGoalEditor();
+        this.closeWeekGoalTip();
+        this.closeWeekGoalEditor();
         super.close();
     }
 
@@ -254,6 +265,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.cancelDrag();
         this.closeStatusMenu();
         this.closeGoalEditor();
+        this.closeWeekGoalTip();
+        this.closeWeekGoalEditor();
         super.destroy();
     }
 
@@ -882,12 +895,46 @@ export class PlanAnnualPanel extends FloatingPanel {
             barEl.toggleClass('is-done', status === 'done');
             barEl.toggleClass('is-paused', status === 'paused');
             barEl.toggleClass('is-not-started', status === 'notStarted');
-            barEl.title = this.formatWeekRange(bar.startWeekKey, bar.endWeekKey);
+            // 进度条按周拆格：填写了本周描述的周在格子右下角显示标识
+            const barWeeks = this.quarterWeeks.slice(bar.startIndex, bar.endIndex + 1);
+            const weekSpan = barWeeks.length;
+            for (let offset = 0; offset < weekSpan; offset++) {
+                const weekKey = barWeeks[offset].weekKey;
+                const cell = barEl.createDiv({ cls: 'plan-annual-bar-cell' });
+                cell.style.left = `${(offset / weekSpan) * 100}%`;
+                cell.style.width = `${(1 / weekSpan) * 100}%`;
+                if ((task.weekGoals?.[weekKey] ?? '').trim()) {
+                    cell.addClass('has-week-goal');
+                    cell.createSpan({ cls: 'plan-annual-bar-weekgoal-mark' });
+                }
+            }
             barEl.addEventListener('click', (evt) => {
                 evt.stopPropagation();
+                // 首次点击仅选中进度条，已选中时再次点击进入该周的本周描述编辑
+                const wasSelected = barEl.hasClass('is-selected');
                 this.selectTask(task.id);
                 this.selectBar(barEl);
+                if (!wasSelected) return;
+                const index = this.barWeekIndexAt(barEl, evt.clientX, weekSpan);
+                if (index < 0) return;
+                this.openWeekGoalEditor(task, barWeeks[index].weekKey, this.barCellRect(barEl, index, weekSpan));
             });
+            barEl.addEventListener('pointermove', (evt) => {
+                if (this.drag) return;
+                const index = this.barWeekIndexAt(barEl, evt.clientX, weekSpan);
+                if (index < 0) {
+                    this.closeWeekGoalTip();
+                    return;
+                }
+                const weekKey = barWeeks[index].weekKey;
+                const desc = (task.weekGoals?.[weekKey] ?? '').trim();
+                if (!desc) {
+                    this.closeWeekGoalTip();
+                    return;
+                }
+                this.showWeekGoalTip(task.id, weekKey, desc, this.barCellRect(barEl, index, weekSpan));
+            });
+            barEl.addEventListener('pointerleave', () => this.closeWeekGoalTip());
             // 右键：删除该任务的整条计划（全年排布全部移除）
             barEl.addEventListener('contextmenu', (evt) => {
                 evt.preventDefault();
@@ -1027,6 +1074,161 @@ export class PlanAnnualPanel extends FloatingPanel {
     /** 周区间文案（含年份，如「2026-W45 - 2026-W48」；单周时「2026-W45」） */
     private formatWeekRange(startWeekKey: string, endWeekKey: string): string {
         return startWeekKey === endWeekKey ? startWeekKey : `${startWeekKey} - ${endWeekKey}`;
+    }
+
+    /** 鼠标横坐标 → 进度条内的周格子下标（不在进度条范围内返回 -1） */
+    private barWeekIndexAt(barEl: HTMLElement, clientX: number, span: number): number {
+        if (span <= 0) return -1;
+        const rect = barEl.getBoundingClientRect();
+        if (rect.width <= 0) return -1;
+        const ratio = (clientX - rect.left) / rect.width;
+        if (ratio < 0 || ratio > 1) return -1;
+        return Math.min(span - 1, Math.floor(ratio * span));
+    }
+
+    /** 进度条内某一周格子的屏幕矩形 */
+    private barCellRect(
+        barEl: HTMLElement,
+        index: number,
+        span: number,
+    ): { left: number; top: number; width: number; height: number } {
+        const rect = barEl.getBoundingClientRect();
+        const cellWidth = rect.width / span;
+        return {
+            left: rect.left + cellWidth * index,
+            top: rect.top,
+            width: cellWidth,
+            height: rect.height,
+        };
+    }
+
+    /** 显示本周描述悬浮面板：有描述时才显示，优先显示在格子下方 */
+    private showWeekGoalTip(
+        taskId: string,
+        weekKey: string,
+        desc: string,
+        cellRect: { left: number; top: number; width: number; height: number },
+    ): void {
+        let tip = this.weekGoalTipEl;
+        if (!tip) {
+            tip = this.element.createDiv({ cls: 'plan-annual-weekgoal-tip' });
+            this.weekGoalTipEl = tip;
+        }
+        const key = `${taskId}:${weekKey}:${desc}`;
+        if (this.weekGoalTipKey !== key) {
+            tip.empty();
+            tip.createDiv({ cls: 'plan-annual-weekgoal-tip-head', text: t('panel.planWeekDescription') });
+            tip.createDiv({ cls: 'plan-annual-weekgoal-tip-week', text: this.formatWeekRange(weekKey, weekKey) });
+            tip.createDiv({ cls: 'plan-annual-weekgoal-tip-text', text: desc });
+            this.weekGoalTipKey = key;
+        }
+        tip.style.display = 'flex';
+        const rootRect = this.element.getBoundingClientRect();
+        const width = tip.offsetWidth;
+        const height = tip.offsetHeight;
+        const rawLeft = cellRect.left - rootRect.left + cellRect.width / 2 - width / 2;
+        const maxLeft = Math.max(8, rootRect.width - width - 8);
+        let top = cellRect.top - rootRect.top + cellRect.height + 6;
+        if (top + height > rootRect.height - 8) {
+            top = cellRect.top - rootRect.top - height - 6;
+        }
+        tip.style.left = `${Math.min(Math.max(rawLeft, 8), maxLeft)}px`;
+        tip.style.top = `${Math.max(8, top)}px`;
+    }
+
+    /** 关闭本周描述悬浮面板 */
+    private closeWeekGoalTip(): void {
+        this.weekGoalTipEl?.remove();
+        this.weekGoalTipEl = null;
+        this.weekGoalTipKey = undefined;
+    }
+
+    /** 打开本周描述编辑面板：文本框失焦保存，点击外部 / Esc 关闭 */
+    private openWeekGoalEditor(
+        task: PrototypeTask,
+        weekKey: string,
+        cellRect: { left: number; top: number; width: number; height: number },
+    ): void {
+        this.closeWeekGoalEditor();
+        this.closeWeekGoalTip();
+        const editor = this.element.createDiv({ cls: 'plan-annual-weekgoal-editor' });
+        this.weekGoalEditorEl = editor;
+        editor.createDiv({ cls: 'plan-annual-weekgoal-editor-head', text: t('panel.planWeekDescription') });
+        editor.createDiv({ cls: 'plan-annual-weekgoal-editor-week', text: this.formatWeekRange(weekKey, weekKey) });
+        const textarea = editor.createEl('textarea', {
+            cls: 'plan-annual-weekgoal-editor-input',
+            attr: { placeholder: t('panel.planWeekDescriptionPlaceholder') },
+        });
+        textarea.value = task.weekGoals?.[weekKey] ?? '';
+
+        const commit = (): void => {
+            this.saveWeekGoal(task, weekKey, textarea.value);
+        };
+        textarea.addEventListener('blur', () => commit());
+        this.weekGoalEditorOutsideHandler = (evt) => {
+            const target = evt.target;
+            if (target instanceof Node && editor.contains(target)) return;
+            commit();
+            this.closeWeekGoalEditor();
+        };
+        this.weekGoalEditorKeyHandler = (evt) => {
+            if (evt.key !== 'Escape') return;
+            evt.preventDefault();
+            evt.stopPropagation();
+            commit();
+            this.closeWeekGoalEditor();
+        };
+        document.addEventListener('mousedown', this.weekGoalEditorOutsideHandler, true);
+        document.addEventListener('keydown', this.weekGoalEditorKeyHandler, true);
+
+        // 定位：优先显示在格子下方，空间不足时翻到上方
+        const rootRect = this.element.getBoundingClientRect();
+        const width = editor.offsetWidth;
+        const height = editor.offsetHeight;
+        const rawLeft = cellRect.left - rootRect.left + cellRect.width / 2 - width / 2;
+        const maxLeft = Math.max(8, rootRect.width - width - 8);
+        let top = cellRect.top - rootRect.top + cellRect.height + 6;
+        if (top + height > rootRect.height - 8) {
+            top = cellRect.top - rootRect.top - height - 6;
+        }
+        editor.style.left = `${Math.min(Math.max(rawLeft, 8), maxLeft)}px`;
+        editor.style.top = `${Math.max(8, top)}px`;
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+
+    /** 关闭本周描述编辑面板 */
+    private closeWeekGoalEditor(): void {
+        if (this.weekGoalEditorOutsideHandler) {
+            document.removeEventListener('mousedown', this.weekGoalEditorOutsideHandler, true);
+            this.weekGoalEditorOutsideHandler = null;
+        }
+        if (this.weekGoalEditorKeyHandler) {
+            document.removeEventListener('keydown', this.weekGoalEditorKeyHandler, true);
+            this.weekGoalEditorKeyHandler = null;
+        }
+        this.weekGoalEditorEl?.remove();
+        this.weekGoalEditorEl = null;
+    }
+
+    /** 保存某一周的本周描述（为空时删除），并刷新泳道 */
+    private saveWeekGoal(task: PrototypeTask, weekKey: string, raw: string): void {
+        const next = raw.trim();
+        if (next === (task.weekGoals?.[weekKey] ?? '')) return;
+        const goals = { ...(task.weekGoals ?? {}) };
+        if (next) {
+            goals[weekKey] = next;
+        } else {
+            delete goals[weekKey];
+        }
+        if (Object.keys(goals).length > 0) {
+            task.weekGoals = goals;
+        } else {
+            delete task.weekGoals;
+        }
+        void this.panelOptions.save();
+        this.renderLanes();
+        this.panelOptions.onChanged?.();
     }
 
     /** 拖拽提示文案（不含年份，如「W45 - W48」；单周时「W45」） */

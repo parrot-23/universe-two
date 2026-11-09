@@ -416,6 +416,9 @@ export const en: I18nMessages = {
     'check.unknownTask': 'Unknown task',
     'check.detailPlanChartTitle': 'Plan Distribution',
     'check.detailExecChartTitle': 'Execution Distribution',
+    'check.detailPlanCategoryTitle': 'Planned Duration by Category',
+    'check.detailExecCategoryTitle': 'Executed Duration by Category',
+    'check.detailCategoryEmpty': 'No data this week',
     'check.detailDuration': 'Duration {duration}',
 
     // Year view

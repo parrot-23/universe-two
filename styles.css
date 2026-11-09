@@ -1590,6 +1590,107 @@ button.parrot-plan-nav-help-btn {
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
+/* 计划vs执行：分布图下方的各分类时长横向柱形图 */
+.check-cat-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+}
+
+.check-cat-bars-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+    margin-bottom: 2px;
+}
+
+.check-cat-bars-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.check-cat-bars-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.check-cat-bars-label {
+    flex: 0 0 64px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.check-cat-bars-track {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--background-modifier-hover, rgba(127, 127, 127, 0.15));
+    overflow: hidden;
+}
+
+.check-cat-bars-track.is-plain {
+    background: transparent;
+}
+
+/* 执行图：每类上下两条柱（灰色计划 / 分类色执行） */
+.check-cat-bars-dual {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.check-cat-bars-dual-line {
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.check-cat-bars-dual-fill {
+    height: 100%;
+    width: var(--fill-width, 0%);
+    border-radius: inherit;
+    background: var(--fill-color, #888888);
+}
+
+.check-cat-bars-dual-line.is-plan .check-cat-bars-dual-fill {
+    background: var(--background-modifier-border, rgba(127, 127, 127, 0.35));
+}
+
+.check-cat-bars-value.is-dual {
+    min-width: 72px;
+}
+
+.check-cat-bars-fill {
+    height: 100%;
+    width: var(--fill-width, 0%);
+    background: var(--fill-color, #888888);
+    border-radius: inherit;
+}
+
+.check-cat-bars-value {
+    flex: 0 0 auto;
+    min-width: 40px;
+    text-align: right;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
 .check-daily-block {
     border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
     border-radius: 10px;
@@ -13232,6 +13333,96 @@ body.plan-annual-dragging {
 .plan-annual-goal-row.is-done .plan-annual-goal-row-text {
     color: var(--text-faint);
     text-decoration: line-through;
+}
+
+/* 年度进度条按周拆格的分格容器（不拦截鼠标事件） */
+.plan-annual-bar-cell {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+/* 该周已填写本周描述：格子右下角显示圆点 */
+.plan-annual-bar-weekgoal-mark {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-normal);
+    mix-blend-mode: difference;
+    opacity: 0.9;
+}
+
+/* 本周描述悬浮面板 */
+.plan-annual-weekgoal-tip {
+    position: absolute;
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 260px;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+.plan-annual-weekgoal-tip-head {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.plan-annual-weekgoal-tip-week {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.plan-annual-weekgoal-tip-text {
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 本周描述编辑面板 */
+.plan-annual-weekgoal-editor {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 240px;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-control-bg, var(--background-primary));
+    color: var(--sdt-text-primary, var(--text-normal));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.plan-annual-weekgoal-editor-head {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.plan-annual-weekgoal-editor-week {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.plan-annual-weekgoal-editor-input {
+    width: 100%;
+    min-height: 60px;
+    resize: vertical;
+    font-size: 12px;
 }
 
 /* 点击目标格子后的新增目标浮层（挂在面板根节点内，按格子定位） */

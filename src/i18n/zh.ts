@@ -414,6 +414,9 @@ export const zh = {
     'check.unknownTask': '未知任务',
     'check.detailPlanChartTitle': '计划分布',
     'check.detailExecChartTitle': '执行分布',
+    'check.detailPlanCategoryTitle': '计划各分类时长',
+    'check.detailExecCategoryTitle': '执行各分类时长',
+    'check.detailCategoryEmpty': '本周暂无数据',
     'check.detailDuration': '时长 {duration}',
 
     // 年视图

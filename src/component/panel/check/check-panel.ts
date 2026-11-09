@@ -584,8 +584,22 @@ export class CheckPanel extends FloatingPanel {
         this.renderWeekNav();
 
         const chartsRow = this.paneEl.createDiv({ cls: 'check-charts-row' });
-        this.renderDistributionChart(chartsRow, t('check.detailPlanChartTitle'), this.planBlocksByDay());
-        this.renderDistributionChart(chartsRow, t('check.detailExecChartTitle'), this.executionBlocksByDay());
+        this.renderDistributionChart(
+            chartsRow,
+            t('check.detailPlanChartTitle'),
+            this.planBlocksByDay(),
+            { title: t('check.detailPlanCategoryTitle'), minutesByCat: this.planMinutesByCategory() },
+        );
+        this.renderDistributionChart(
+            chartsRow,
+            t('check.detailExecChartTitle'),
+            this.executionBlocksByDay(),
+            {
+                title: t('check.detailExecCategoryTitle'),
+                minutesByCat: this.execMinutesByCategory(),
+                planMinutesByCat: this.planMinutesByCategory(),
+            },
+        );
     }
 
     /** 周数切换：‹ 第 N 周 › */
@@ -663,6 +677,11 @@ export class CheckPanel extends FloatingPanel {
         body: HTMLElement,
         title: string,
         blocksByDay: Map<number, ChartBlock[]>,
+        categorySummary?: {
+            title: string;
+            minutesByCat: Map<string, number>;
+            planMinutesByCat?: Map<string, number>;
+        },
     ): void {
         const section = body.createDiv({ cls: 'check-daily-section' });
         section.createDiv({ cls: 'check-daily-section-title', text: title });
@@ -694,6 +713,111 @@ export class CheckPanel extends FloatingPanel {
                     '--block-height': `${(Math.max(0, block.end - block.start) / 1440) * 100}%`,
                 });
                 blockEl.setAttribute('title', `${category?.label ?? t('inbox.noCategory')} ${formatMinutes(block.start)}-${formatMinutes(block.end)}`);
+            }
+        }
+
+        if (categorySummary) {
+            this.renderCategoryBars(
+                section,
+                categorySummary.title,
+                categorySummary.minutesByCat,
+                categorySummary.planMinutesByCat,
+            );
+        }
+    }
+
+    /** 计划各分类时长：当前周时间盒格子按分类累加（每格 1 小时） */
+    private planMinutesByCategory(): Map<string, number> {
+        const minutesByCat = new Map<string, number>();
+        for (const cell of this.panelOptions.timeBoxRepo.weekCells(this.weekKey)) {
+            const catId = cell.categoryId ?? UNCATEGORIZED_CATEGORY_ID;
+            minutesByCat.set(catId, (minutesByCat.get(catId) ?? 0) + 60);
+        }
+        return minutesByCat;
+    }
+
+    /** 执行各分类时长：当前周执行记录按任务分类累加（跨午夜裁剪到本周） */
+    private execMinutesByCategory(): Map<string, number> {
+        const records = this.panelOptions.taskExecutionRepo.records;
+        const minutesByCat = new Map<string, number>();
+        const firstDayKey = makeDayKeyFromWeek(this.weekKey, 1);
+        const [fy, fm, fd] = firstDayKey.split('-').map(Number);
+        const weekStart = new Date(fy, fm - 1, fd).getTime();
+        const weekEnd = weekStart + 7 * 24 * 3600000;
+        for (const record of records) {
+            const startMs = Math.max(weekStart, record.startAt);
+            const endMs = Math.min(weekEnd, record.endAt);
+            if (endMs <= startMs) continue;
+            const catId = this.categoryIdOf(record.taskId) ?? UNCATEGORIZED_CATEGORY_ID;
+            minutesByCat.set(catId, (minutesByCat.get(catId) ?? 0) + (endMs - startMs) / 60000);
+        }
+        return minutesByCat;
+    }
+
+    /** 各分类时长横向柱形图：图内共用同一时长刻度；传入计划数据时每类绘制计划 / 执行两条柱 */
+    private renderCategoryBars(
+        body: HTMLElement,
+        title: string,
+        minutesByCat: Map<string, number>,
+        planMinutesByCat?: Map<string, number>,
+    ): void {
+        const wrap = body.createDiv({ cls: 'check-cat-bars' });
+        wrap.createDiv({ cls: 'check-cat-bars-title', text: title });
+
+        const cats = this.panelOptions.categoryData.categories;
+        const knownIds = new Set(cats.map((cat) => cat.id));
+        // 兜底：数据里出现但分类列表中不存在的分类
+        const extraIds = Array.from(minutesByCat.keys())
+            .concat(Array.from(planMinutesByCat?.keys() ?? []))
+            .filter((id, index, list) => list.indexOf(id) === index)
+            .filter((id) => !knownIds.has(id));
+        const rows = [
+            ...cats.map((cat) => ({
+                id: cat.id,
+                label: cat.label,
+                color: cat.color,
+                actual: minutesByCat.get(cat.id) ?? 0,
+                plan: planMinutesByCat?.get(cat.id) ?? 0,
+            })),
+            ...extraIds.map((id) => ({
+                id,
+                label: t('inbox.noCategory'),
+                color: '#888888',
+                actual: minutesByCat.get(id) ?? 0,
+                plan: planMinutesByCat?.get(id) ?? 0,
+            })),
+        ];
+        const maxMinutes = Math.max(0, ...rows.map((row) => Math.max(row.actual, row.plan)));
+        const widthOf = (minutes: number): string =>
+            `${maxMinutes > 0 ? (minutes / maxMinutes) * 100 : 0}%`;
+
+        for (const row of rows) {
+            const rowEl = wrap.createDiv({ cls: 'check-cat-bars-row' });
+            rowEl.createSpan({ cls: 'check-cat-bars-dot' }).style.background = row.color ?? '#888888';
+            rowEl.createSpan({ cls: 'check-cat-bars-label', text: row.label });
+            if (planMinutesByCat) {
+                // 每类两条：上方灰色为计划时长，下方分类色为执行时长
+                const bars = rowEl.createDiv({ cls: 'check-cat-bars-dual' });
+                bars.createDiv({ cls: 'check-cat-bars-dual-line is-plan' })
+                    .createDiv({ cls: 'check-cat-bars-dual-fill' })
+                    .setCssProps({ '--fill-width': widthOf(row.plan) });
+                bars.createDiv({ cls: 'check-cat-bars-dual-line' })
+                    .createDiv({ cls: 'check-cat-bars-dual-fill' })
+                    .setCssProps({
+                        '--fill-color': row.color ?? '#888888',
+                        '--fill-width': widthOf(row.actual),
+                    });
+                rowEl.createSpan({
+                    cls: 'check-cat-bars-value is-dual',
+                    text: `${formatHours(row.actual)} / ${formatHours(row.plan)}`,
+                });
+            } else {
+                const track = rowEl.createDiv({ cls: 'check-cat-bars-track is-plain' });
+                track.createDiv({ cls: 'check-cat-bars-fill' }).setCssProps({
+                    '--fill-color': row.color ?? '#888888',
+                    '--fill-width': widthOf(row.actual),
+                });
+                rowEl.createSpan({ cls: 'check-cat-bars-value', text: formatHours(row.actual) });
             }
         }
     }
