@@ -1,7 +1,7 @@
 {
   "id": "universe-two",
   "name": "Universe No.2",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "minAppVersion": "1.13.0",
   "description": "A weekly schedule planner with time blocks, event planning, and execution tracking.",
   "author": "parrot-23",

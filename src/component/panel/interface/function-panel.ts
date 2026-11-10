@@ -1,5 +1,6 @@
-// 功能面板：顶部两级菜单（一级：任务 / 计划 / 收集，二级：各具体功能），内容区直接嵌入对应功能面板。
-// 嵌入模式复用各面板实例（FloatingPanel.embed），切换菜单时关闭并退回原浮层容器；「任务详情」先列任务再嵌入详情。
+// 功能面板：顶部两级菜单（一级：任务 / 板块 / 计划 / 检查 / 收集，二级：各具体功能），内容区直接嵌入对应功能面板。
+// 无二级菜单的一级组（如「检查」）用 directItem 指定直接嵌入的面板，二级行整体隐藏。
+// 嵌入模式复用各面板实例（FloatingPanel.embed），切换菜单时关闭并退回原浮层容器；「任务详情」默认打开第一个根任务。
 import { setIcon } from 'obsidian';
 
 import type { PrototypeTask } from '../../../datatypes/prototype-task';
@@ -7,7 +8,7 @@ import { t } from '../../../i18n';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 一级菜单标识 */
-export type FunctionGroupId = 'task' | 'plan' | 'collect';
+export type FunctionGroupId = 'task' | 'section' | 'plan' | 'check' | 'collect';
 
 /** 二级菜单（功能）标识 */
 export type FunctionItemId =
@@ -30,7 +31,10 @@ interface FunctionItem {
 interface FunctionGroup {
     id: FunctionGroupId;
     label: string;
+    /** 二级菜单；无二级菜单时为空并改用 directItem */
     items: FunctionItem[];
+    /** 无二级菜单的一级组：直接嵌入的面板 */
+    directItem?: FunctionItemId;
 }
 
 /** 功能面板配置 */
@@ -67,18 +71,27 @@ export class FunctionPanel extends FloatingPanel {
                 items: [
                     { id: 'task', label: t('interface.task'), icon: 'list-todo' },
                     { id: 'taskDetail', label: t('panel.taskDetailTitle'), icon: 'file-text' },
-                    { id: 'habit', label: t('interface.habit'), icon: 'repeat' },
                 ],
+            },
+            {
+                id: 'section',
+                label: t('interface.functionGroupSection'),
+                items: [{ id: 'habit', label: t('interface.habit'), icon: 'repeat' }],
             },
             {
                 id: 'plan',
                 label: t('interface.functionGroupPlan'),
                 items: [
-                    { id: 'timeBox', label: t('interface.timeBox'), icon: 'calendar-clock' },
                     { id: 'planAnnual', label: t('interface.planAnnual'), icon: 'calendar-range' },
                     { id: 'planWeek', label: t('interface.planWeek'), icon: 'calendar-check' },
-                    { id: 'check', label: t('interface.check'), icon: 'clipboard-check' },
+                    { id: 'timeBox', label: t('interface.timeBox'), icon: 'calendar-clock' },
                 ],
+            },
+            {
+                id: 'check',
+                label: t('interface.check'),
+                items: [],
+                directItem: 'check',
             },
             {
                 id: 'collect',
@@ -124,9 +137,10 @@ export class FunctionPanel extends FloatingPanel {
         return this.groups.find((group) => group.id === this.activeGroupId) ?? this.groups[0];
     }
 
-    /** 当前二级菜单 */
+    /** 当前二级菜单；无二级菜单的一级组直接返回其嵌入面板 */
     private activeItem(): FunctionItem {
         const group = this.activeGroup();
+        if (group.directItem) return { id: group.directItem, label: group.label, icon: 'clipboard-check' };
         return group.items.find((item) => item.id === this.activeItemId) ?? group.items[0];
     }
 
@@ -143,15 +157,18 @@ export class FunctionPanel extends FloatingPanel {
             btn.onclick = () => {
                 if (this.activeGroupId === group.id) return;
                 this.activeGroupId = group.id;
-                this.activeItemId = group.items[0].id;
+                this.activeItemId = group.directItem ?? group.items[0].id;
                 this.detailTask = undefined;
                 this.renderMenu();
                 this.renderContent();
             };
         }
 
+        const items = this.activeGroup().items;
+        // 无二级菜单的一级组：整行隐藏，内容区直接嵌入面板
+        this.itemTabsEl.toggleClass('is-hidden', items.length === 0);
         this.itemTabsEl.empty();
-        for (const item of this.activeGroup().items) {
+        for (const item of items) {
             const btn = this.itemTabsEl.createEl('button', {
                 cls: 'interface-function-item-tab',
                 attr: { type: 'button' },
@@ -169,59 +186,25 @@ export class FunctionPanel extends FloatingPanel {
         }
     }
 
-    /** 渲染内容区：普通功能直接嵌入面板，「任务详情」先列任务再嵌入详情 */
+    /** 渲染内容区：普通功能直接嵌入面板，「任务详情」默认打开第一个根任务 */
     private renderContent(): void {
         if (!this.isOpen) return;
         this.unmountPanel();
         this.contentEl.empty();
         const item = this.activeItem();
         if (item.id === 'taskDetail') {
-            if (!this.detailTask) {
-                this.renderTaskList();
+            const tasks = this.panelOptions.getTasks();
+            if (tasks.length === 0) {
+                this.contentEl.createDiv({ cls: 'interface-function-hint', text: t('interface.functionNoTask') });
                 return;
             }
-            this.renderDetailHeader(this.detailTask);
+            // 未选中时默认第一个根任务；已选中的任务被删除时同样回退到第一个
+            if (!this.detailTask || !tasks.some((task) => task.id === this.detailTask?.id)) {
+                this.detailTask = tasks[0];
+            }
         }
         const host = this.contentEl.createDiv({ cls: 'interface-function-embed-host' });
         this.embedPanel(item.id, this.detailTask, host);
-    }
-
-    /** 任务详情入口：列出根任务，点击后在该内容区嵌入详情 */
-    private renderTaskList(): void {
-        const tasks = this.panelOptions.getTasks();
-        if (tasks.length === 0) {
-            this.contentEl.createDiv({ cls: 'interface-function-hint', text: t('interface.functionNoTask') });
-            return;
-        }
-        this.contentEl.createDiv({ cls: 'interface-function-hint', text: t('interface.functionTaskDetailHint') });
-        const list = this.contentEl.createDiv({ cls: 'interface-function-task-list' });
-        for (const task of tasks) {
-            const row = list.createDiv({ cls: 'interface-function-task-row' });
-            row.createDiv({ cls: 'interface-function-task-name', text: task.name });
-            const description = (task.description ?? '').trim();
-            if (description) {
-                row.createDiv({ cls: 'interface-function-task-desc', text: description });
-            }
-            row.onclick = () => {
-                this.detailTask = task;
-                this.renderContent();
-            };
-        }
-    }
-
-    /** 任务详情嵌入时的顶部行：返回任务列表 + 当前任务名 */
-    private renderDetailHeader(task: PrototypeTask): void {
-        const bar = this.contentEl.createDiv({ cls: 'interface-function-detail-bar' });
-        const backBtn = bar.createEl('button', {
-            cls: 'interface-function-detail-back',
-            text: t('interface.functionBack'),
-            attr: { type: 'button' },
-        });
-        backBtn.onclick = () => {
-            this.detailTask = undefined;
-            this.renderContent();
-        };
-        bar.createSpan({ cls: 'interface-function-detail-name', text: task.name });
     }
 
     /** 把功能面板嵌入内容区（无对应实例时保持空白） */

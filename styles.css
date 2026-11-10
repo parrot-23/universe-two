@@ -7089,6 +7089,11 @@ button.swimlane-section-card-settings {
     gap: 6px;
 }
 
+.interface-function-item-tabs.is-hidden {
+    display: none;
+}
+
+
 .interface-function-item-tab {
     display: inline-flex;
     align-items: center;
@@ -14118,58 +14123,80 @@ button.interface-today-tasks-add {
     gap: 8px;
 }
 
-/* 单个板块 */
-.task-section-block {
+/* 选项卡栏：单行横向滚动 */
+.task-section-tabs {
     display: flex;
-    flex-direction: column;
-    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
-    border-radius: 8px;
-    background: var(--sdt-card-bg, var(--background-secondary));
-    overflow: hidden;
+    align-items: flex-end;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    scrollbar-width: thin;
 }
 
-.task-section-block-head {
-    display: flex;
+.task-section-tabs::-webkit-scrollbar {
+    height: 4px;
+}
+
+.task-section-tab {
+    display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
+    gap: 4px;
+    padding: 5px 10px;
+    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 12px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    white-space: nowrap;
     cursor: pointer;
-    user-select: none;
 }
 
-.task-section-block-head:hover {
+.task-section-tab:hover {
+    color: var(--sdt-text-primary, var(--text-normal));
     background: var(--sdt-hover-bg, var(--background-modifier-hover));
 }
 
-.task-section-block-icon,
-.task-section-block-chevron {
-    display: inline-flex;
-    flex: 0 0 auto;
-    color: var(--sdt-text-secondary, var(--text-muted));
-}
-
-.task-section-block-icon .svg-icon,
-.task-section-block-chevron .svg-icon {
-    width: 14px;
-    height: 14px;
-}
-
-.task-section-block-title {
-    font-size: 12px;
-    font-weight: 600;
+.task-section-tab.is-active {
+    border-color: var(--sdt-card-border, var(--background-modifier-border));
+    border-bottom-color: var(--interactive-accent);
+    background: var(--background-primary);
     color: var(--sdt-text-primary, var(--text-normal));
 }
 
-.task-section-block-count {
-    font-size: 11px;
-    color: var(--sdt-text-secondary, var(--text-muted));
+.task-section-tab-icon {
+    display: inline-flex;
 }
 
-.task-section-block-spacer {
-    flex: 1;
+.task-section-tab-icon .svg-icon {
+    width: 13px;
+    height: 13px;
 }
 
-.task-section-block-action {
+.task-section-tab-count {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+/* 选项卡内容区 */
+.task-section-tab-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 6px;
+}
+
+.task-section-tab-head {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: -4px;
+}
+
+.task-section-more-btn {
     display: inline-flex;
     padding: 2px;
     background: transparent;
@@ -14179,22 +14206,18 @@ button.interface-today-tasks-add {
     cursor: pointer;
 }
 
-.task-section-block-action:hover {
-    color: var(--text-error);
+.task-section-more-btn:hover {
+    color: var(--sdt-text-primary, var(--text-normal));
 }
 
-.task-section-block-action .svg-icon {
-    width: 13px;
-    height: 13px;
+.task-section-more-btn .svg-icon {
+    width: 14px;
+    height: 14px;
 }
 
-.task-section-block-body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 4px 8px 8px;
+.task-section-empty-hint {
+    padding: 8px 2px;
 }
-
 /* 未创建板块：胶囊平铺 */
 .task-section-capsules {
     display: flex;

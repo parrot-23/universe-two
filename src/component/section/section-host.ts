@@ -1,10 +1,10 @@
 // 任务板块宿主：任务详情面板与任务板块面板共用。
 // 渲染规则：
-//  1. 已落库的板块按 task.sections 数组顺序展示；
-//  2. 未创建的类型以胶囊平铺在底部，点击只在内存中展开草稿，不写入任何数据；
-//  3. 草稿首次写入非空内容才落库（由访问器 ensureSection 触发）；
-//  4. 落库后即使清空内容也保留板块，只有显式「移除板块」才删除。
-import { Notice, TFolder, setIcon, type App, type TFile } from 'obsidian';
+//  1. 已落库的板块以选项卡展示（按 task.sections 数组顺序，单行横向滚动）；
+//  2. 未创建的类型以胶囊平铺在底部，点击生成临时选项卡，不写入任何数据；
+//  3. 草稿首次写入非空内容才落库（由访问器 ensureSection 触发），切走空草稿即丢弃；
+//  4. 落库后即使清空内容也保留板块，只有「…」菜单中的「移除板块」才删除。
+import { Menu, Notice, TFolder, setIcon, type App, type TFile } from 'obsidian';
 
 import type { ChecklistItem } from '../../datatypes/domain';
 import type { PrototypeTask } from '../../datatypes/prototype-task';
@@ -23,7 +23,6 @@ import {
     appendChecklist,
     getChecklist,
     getDayGoalEntries,
-    getSection,
     getTaskFileDir,
     getTaskFileTimestamp,
     getTaskGoals,
@@ -69,10 +68,10 @@ export class SectionHost {
     private readonly options: SectionHostOptions;
     /** 渲染容器（重绘时复用） */
     private hostEl: HTMLElement | null = null;
-    /** 草稿板块类型（已展开但尚未落库） */
-    private drafts: SectionType[] = [];
-    /** 草稿板块的折叠状态 */
-    private draftCollapsed = new Set<SectionType>();
+    /** 当前选中的选项卡类型 */
+    private activeType: SectionType | null = null;
+    /** 草稿板块类型（临时选项卡，切走即丢弃） */
+    private draftType: SectionType | null = null;
     /** 日目标板块当前查看的周键 */
     private weekKey = getCurrentWeekKey();
     /** 清单排序方式 */
@@ -90,8 +89,8 @@ export class SectionHost {
 
     /** 切换任务时重置临时状态（草稿不跨任务保留） */
     reset(): void {
-        this.drafts = [];
-        this.draftCollapsed.clear();
+        this.activeType = null;
+        this.draftType = null;
         this.weekKey = getCurrentWeekKey();
         this.checklistSort = 'created';
         this.selectedChecklistId = null;
@@ -114,15 +113,24 @@ export class SectionHost {
 
         const task = this.options.getTask();
         if (!task) return;
-        const available = this.availableTypes();
-        // 已落库板块：按数组顺序，过滤掉本面板不展示的类型
-        const sections = (task.sections ?? []).filter((section) => available.includes(section.type));
-        // 草稿：已经落库的类型从草稿中移除
-        this.drafts = this.drafts.filter((type) => !hasSection(task, type));
 
-        for (const section of sections) this.renderBlock(host, task, section.type, false);
-        for (const type of this.drafts) this.renderBlock(host, task, type, true);
-        this.renderCapsules(host, task);
+        // 草稿已落库或不在展示范围时取消草稿标记
+        if (this.draftType && (hasSection(task, this.draftType) || !this.availableTypes().includes(this.draftType))) {
+            this.draftType = null;
+        }
+        const types = this.tabTypes(task);
+        if (!this.activeType || !types.includes(this.activeType)) this.activeType = types[0] ?? null;
+
+        // 未创建的板块胶囊：紧贴任务名称 / 描述下方
+        this.renderCapsules(host, task, types);
+        this.renderTabs(host, task, types);
+        const body = host.createDiv({ cls: 'task-section-tab-body' });
+        if (this.activeType) {
+            this.renderTabHead(body, task, this.activeType);
+            this.renderBody(body, task, this.activeType);
+        } else {
+            body.createDiv({ cls: 'task-section-empty task-section-empty-hint', text: t('panel.sectionEmpty') });
+        }
     }
 
     /** 本面板展示的板块类型 */
@@ -132,73 +140,84 @@ export class SectionHost {
         return allowed ? all.filter((type) => allowed.includes(type)) : all;
     }
 
-    /* ---------------- 板块外框 ---------------- */
-
-    /** 渲染一个板块（草稿或已落库） */
-    private renderBlock(parent: HTMLElement, task: PrototypeTask, type: SectionType, draft: boolean): void {
-        const def = SECTION_REGISTRY[type];
-        const section = draft ? undefined : getSection(task, type);
-        const collapsed = draft ? this.draftCollapsed.has(type) : section?.collapsed === true;
-
-        const block = parent.createDiv({ cls: 'task-section-block' });
-        block.dataset.sectionType = type;
-        if (draft) block.addClass('is-draft');
-
-        const head = block.createDiv({ cls: 'task-section-block-head' });
-        setIcon(head.createSpan({ cls: 'task-section-block-icon' }), def.icon);
-        head.createSpan({ cls: 'task-section-block-title', text: t(def.labelKey as LabelKey) });
-        const count = this.sectionCountText(task, type);
-        if (count) head.createSpan({ cls: 'task-section-block-count', text: count });
-        head.createDiv({ cls: 'task-section-block-spacer' });
-
-        // 移除板块：草稿仅丢弃内存状态，已落库才删除数据
-        const removeBtn = head.createEl('button', {
-            cls: 'task-section-block-action',
-            attr: { type: 'button', 'aria-label': t('panel.sectionRemove') },
-        });
-        removeBtn.title = t('panel.sectionRemove');
-        setIcon(removeBtn, 'trash-2');
-        removeBtn.addEventListener('click', (evt) => {
-            evt.stopPropagation();
-            void this.removeBlock(task, type, draft);
-        });
-
-        // 折叠 / 展开
-        setIcon(head.createSpan({ cls: 'task-section-block-chevron' }), collapsed ? 'chevron-right' : 'chevron-down');
-        head.addEventListener('click', () => {
-            if (draft) {
-                if (this.draftCollapsed.has(type)) this.draftCollapsed.delete(type);
-                else this.draftCollapsed.add(type);
-                this.render();
-                return;
-            }
-            if (!section) return;
-            if (section.collapsed) delete section.collapsed;
-            else section.collapsed = true;
-            void this.options.save();
-            this.render();
-        });
-
-        if (collapsed) return;
-        this.renderBody(block.createDiv({ cls: 'task-section-block-body' }), task, type);
+    /** 选项卡列表：已落库板块按数组顺序 + 末尾草稿 */
+    private tabTypes(task: PrototypeTask): SectionType[] {
+        const available = this.availableTypes();
+        const persisted = (task.sections ?? [])
+            .map((section) => section.type)
+            .filter((type) => available.includes(type));
+        const draft =
+            this.draftType && !hasSection(task, this.draftType) && available.includes(this.draftType)
+                ? [this.draftType]
+                : [];
+        return [...persisted, ...draft];
     }
 
-    /** 移除板块（草稿只丢弃内存状态） */
-    private async removeBlock(task: PrototypeTask, type: SectionType, draft: boolean): Promise<void> {
-        if (draft) {
-            this.drafts = this.drafts.filter((item) => item !== type);
-            this.draftCollapsed.delete(type);
+    /* ---------------- 选项卡 ---------------- */
+
+    /** 选项卡栏（单行横向滚动） */
+    private renderTabs(parent: HTMLElement, task: PrototypeTask, types: SectionType[]): void {
+        const tabs = parent.createDiv({ cls: 'task-section-tabs' });
+        for (const type of types) {
+            const def = SECTION_REGISTRY[type];
+            const tab = tabs.createEl('button', { cls: 'task-section-tab', attr: { type: 'button' } });
+            tab.toggleClass('is-active', this.activeType === type);
+            setIcon(tab.createSpan({ cls: 'task-section-tab-icon' }), def.icon);
+            tab.createSpan({ cls: 'task-section-tab-label', text: t(def.labelKey as LabelKey) });
+            const count = this.sectionCountText(task, type);
+            if (count) tab.createSpan({ cls: 'task-section-tab-count', text: count });
+            tab.addEventListener('click', () => this.activateTab(task, type));
+        }
+    }
+
+    /** 切换选项卡：切走尚未写入的草稿时直接丢弃 */
+    private activateTab(task: PrototypeTask, type: SectionType): void {
+        if (this.activeType === type) return;
+        if (this.draftType && !hasSection(task, this.draftType)) this.draftType = null;
+        this.activeType = type;
+        this.render();
+    }
+
+    /** 内容区右上角的「…」菜单：移除当前板块（草稿只丢弃内存状态） */
+    private renderTabHead(body: HTMLElement, task: PrototypeTask, type: SectionType): void {
+        const head = body.createDiv({ cls: 'task-section-tab-head' });
+        const moreBtn = head.createEl('button', {
+            cls: 'task-section-more-btn',
+            attr: { type: 'button', 'aria-label': t('panel.sectionRemove') },
+        });
+        moreBtn.title = t('panel.sectionRemove');
+        setIcon(moreBtn, 'more-horizontal');
+        moreBtn.addEventListener('click', (evt) => {
+            const menu = new Menu();
+            menu.addItem((item) =>
+                item
+                    .setTitle(t('panel.sectionRemove'))
+                    .setIcon('trash-2')
+                    .onClick(() => void this.removeTab(task, type)),
+            );
+            menu.showAtMouseEvent(evt);
+        });
+    }
+
+    /** 移除板块：草稿只丢弃内存状态，已落库才删除数据并顺延到相邻选项卡 */
+    private async removeTab(task: PrototypeTask, type: SectionType): Promise<void> {
+        if (!hasSection(task, type)) {
+            this.draftType = null;
+            this.activeType = null;
             this.render();
             return;
         }
+        const types = this.tabTypes(task);
+        const index = types.indexOf(type);
+        const remaining = types.filter((item) => item !== type);
         removeSection(task, type);
+        this.activeType = remaining[index] ?? remaining[index - 1] ?? null;
         await this.commit(task);
     }
 
-    /** 未创建的板块类型：胶囊平铺 */
-    private renderCapsules(parent: HTMLElement, task: PrototypeTask): void {
-        const types = this.availableTypes()
-            .filter((type) => !hasSection(task, type) && !this.drafts.includes(type));
+    /** 未创建的板块类型：胶囊平铺，点击生成临时选项卡 */
+    private renderCapsules(parent: HTMLElement, task: PrototypeTask, tabTypes: SectionType[]): void {
+        const types = this.availableTypes().filter((type) => !tabTypes.includes(type));
         if (types.length === 0) return;
         const row = parent.createDiv({ cls: 'task-section-capsules' });
         for (const type of types) {
@@ -207,8 +226,10 @@ export class SectionHost {
             setIcon(capsule.createSpan({ cls: 'task-section-capsule-icon' }), def.icon);
             capsule.createSpan({ cls: 'task-section-capsule-text', text: t(def.labelKey as LabelKey) });
             capsule.addEventListener('click', () => {
-                if (this.drafts.includes(type)) return;
-                this.drafts.push(type);
+                // 先丢弃尚未写入的旧草稿
+                if (this.draftType && !hasSection(task, this.draftType)) this.draftType = null;
+                this.draftType = type;
+                this.activeType = type;
                 this.render();
             });
         }
