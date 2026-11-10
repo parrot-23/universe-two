@@ -356,14 +356,15 @@ export class InterfaceView {
         if (!this.planWeekPanel) {
             const holder = this.plugin as Plugin & {
                 planAssignmentRepo: ConstructorParameters<typeof PlanWeekPanel>[0]['planAssignmentRepo'];
+                timeBoxRepo: ConstructorParameters<typeof PlanWeekPanel>[0]['timeBoxRepo'];
                 saveAll: () => Promise<void>;
             };
             this.planWeekPanel = new PlanWeekPanel({
                 container: this.panelContainer,
                 getTasks: () => this.prototypeTaskRepo.tasks,
                 planAssignmentRepo: holder.planAssignmentRepo,
+                timeBoxRepo: holder.timeBoxRepo,
                 getCategories: () => this.categoryData.categories,
-                taskExecutionRepo: this.taskExecutionRepo,
                 save: () => holder.saveAll(),
                 onChanged: () => {
                     this.todayCard?.refreshTasks();
@@ -485,6 +486,8 @@ export class InterfaceView {
                 onTasksChanged: () => {
                     this.taskPanel?.setTasks(this.rootPrototypeTasks());
                     this.detailPanels.forEach((item) => item.setTasks(this.prototypeTaskRepo.tasks));
+                    // 任务详情里增删目标后，计划年度面板底部目标区需要同步
+                    this.planAnnualPanel?.refresh();
                     this.todayCard?.refreshTasks();
                     this.todayTasksCard?.refresh();
                     this.clockCard?.refresh();
@@ -544,6 +547,7 @@ export class InterfaceView {
     private refreshTaskConsumers(): void {
         this.taskPanel?.setTasks(this.rootPrototypeTasks());
         this.detailPanels.forEach((panel) => panel.setTasks(this.prototypeTaskRepo.tasks));
+        this.planAnnualPanel?.refresh();
         this.todayCard?.refreshTasks();
         this.todayTasksCard?.refresh();
         this.clockCard?.refresh();

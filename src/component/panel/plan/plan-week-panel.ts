@@ -1,9 +1,9 @@
 // 计划一周面板：左右结构。
 // 左侧：周信息摘要（周数 / 日期范围 / 任务数）+ 本周已整周排布的任务列表，
-//       点击任务条目选中它，作为右侧本周目标与日目标的绑定任务（再次点击取消选中）。
+//       点击任务条目选中它，作为右侧日目标的绑定任务（再次点击取消选中）；
+//       列表底部：选中任务时显示本周描述输入框，未选中时显示本周各分类计划时长柱形图。
 // 右侧：顶部周切换（上一周 / 周数 + 日期范围 / 下一周），
-//       下方左侧方框为本周目标（多行文本域，失焦保存，按选中任务 + 周键独立存储），
-//       下方右侧为周一到周日 7 个方框，编辑选中任务在该周的日目标
+//       下方为周一到周日 7 个方框，编辑选中任务在该周的日目标
 //       （数据与任务详情「一周目标」选项卡共享 task.dayGoals）。
 import { setIcon } from 'obsidian';
 
@@ -11,12 +11,11 @@ import type { TaskStatus } from '../../../datatypes/domain';
 import type { PrototypeTask, TaskDayGoalEntry } from '../../../datatypes/prototype-task';
 import { t } from '../../../i18n';
 import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
-import type { TaskExecutionRepo } from '../../../repos/task-execution-repo';
+import type { TimeBoxRepo } from '../../../repos/timebox-repo';
 import type { PlanCategory } from '../../../shared/plan-category-manager';
+import { UNCATEGORIZED_CATEGORY_ID } from '../../../shared/plan-category-manager';
 import {
-    getCurrentDayKey,
     getCurrentWeekKey,
-    makeDayKey,
     makeDayKeyFromWeek,
     parseWeekKey,
     shiftWeekKey,
@@ -31,10 +30,10 @@ export interface PlanWeekPanelOptions extends Omit<FloatingPanelOptions, 'title'
     getTasks: () => PrototypeTask[];
     /** 计划排布数据仓库（读取本周已排布任务、读写周描述） */
     planAssignmentRepo: PlanAssignmentRepo;
+    /** 时间盒仓库（未选中任务时统计本周各分类计划时长） */
+    timeBoxRepo: TimeBoxRepo;
     /** 分类数据源（任务名称前的分类颜色圆点） */
     getCategories: () => PlanCategory[];
-    /** 执行记录仓库（图表统计选中任务近 14 天的执行时长） */
-    taskExecutionRepo: TaskExecutionRepo;
     /** 数据保存回调 */
     save: () => Promise<void>;
     /** 数据变更回调（界面视图其他卡片据此刷新） */
@@ -65,18 +64,13 @@ export class PlanWeekPanel extends FloatingPanel {
     private summaryEl!: HTMLElement;
     private taskListEl!: HTMLElement;
     private navEl!: HTMLElement;
-    private descEl!: HTMLTextAreaElement;
-    private dayListEl!: HTMLElement;
-    /** 已选任务名称（周切换行下方、本周描述方框上方） */
+    /** 左侧任务列表底部区域：选中任务时为本周描述输入框，未选中时为本周分类时长柱形图 */
+    private bottomEl!: HTMLElement;
+    /** 本周描述输入框（仅选中任务时存在） */
+    private descEl: HTMLTextAreaElement | undefined;
+    /** 已选任务名称（周切换行内右侧） */
     private selectedEl!: HTMLElement;
-    /** 近 14 天执行时长柱形图方框（本周描述方框下方） */
-    private chartEl!: HTMLElement;
-    /** 左侧顶部两个模式按钮（排布一周 / 填写日目标） */
-    private scheduleButtonEl!: HTMLButtonElement;
-    private dayGoalButtonEl!: HTMLButtonElement;
-    /** 右侧内容区（填写日目标模式：描述 + 图表 + 每日目标） */
-    private contentEl!: HTMLElement;
-    /** 右侧七列网格（排布一周模式：选中左侧任务后点击某天排布） */
+    /** 右侧七列网格：选中左侧任务后点击某天排布 */
     private dayGridEl!: HTMLElement;
     /** 日目标悬浮预览浮层（悬浮某天卡片区域时展示该天已填写的日目标） */
     private dayGoalTipEl!: HTMLElement;
@@ -94,9 +88,6 @@ export class PlanWeekPanel extends FloatingPanel {
     private dayGoalEditorOutsideHandler: ((evt: MouseEvent) => void) | undefined;
     /** Esc 关闭浮层的回调（打开时绑定到 document） */
     private dayGoalEditorEscapeHandler: ((evt: KeyboardEvent) => void) | undefined;
-    /** 当前模式：排布一周（默认，七列任务排布）/ 填写日目标 */
-    private viewMode: 'schedule' | 'dayGoal' = 'schedule';
-
     /** 当前显示的周键 */
     private weekKey: string;
     /** 左侧选中的任务 id（右侧日目标的绑定任务） */
@@ -128,84 +119,35 @@ export class PlanWeekPanel extends FloatingPanel {
     }
 
     private renderLayout(): void {
-        // 左侧：顶部模式按钮 + 周信息摘要 + 本周已排布任务列表
+        // 左侧：周信息摘要 + 本周已排布任务列表 + 底栏（本周描述 / 分类时长）
         const left = this.body.createDiv({ cls: 'plan-week-left' });
-        const leftTop = left.createDiv({ cls: 'plan-week-left-top' });
-        this.scheduleButtonEl = this.createModeButton(leftTop, 'calendar-range', t('panel.planWeekModeSchedule'));
-        this.scheduleButtonEl.addEventListener('click', () => this.switchMode('schedule'));
-        this.dayGoalButtonEl = this.createModeButton(leftTop, 'list-todo', t('panel.planWeekModeDayGoal'));
-        this.dayGoalButtonEl.addEventListener('click', () => this.switchMode('dayGoal'));
         this.summaryEl = left.createDiv({ cls: 'plan-week-summary' });
         this.taskListEl = left.createDiv({ cls: 'plan-week-task-list' });
+        // 底栏：选中任务时是本周描述输入框，未选中时是本周各分类计划时长柱形图
+        this.bottomEl = left.createDiv({ cls: 'plan-week-bottom' });
 
-        // 右侧：周切换行（左侧周切换 + 右侧已选任务名称）+ 内容区 / 七列网格
+        // 右侧：周切换行（左侧周切换 + 右侧已选任务名称）+ 七列网格
         const right = this.body.createDiv({ cls: 'plan-week-right' });
         const navRow = right.createDiv({ cls: 'plan-week-nav-row' });
         this.navEl = navRow.createDiv({ cls: 'task-week-goal-nav' });
         // 已选任务名称：与周切换按钮同一行，靠右显示
         this.selectedEl = navRow.createDiv({ cls: 'plan-week-selected' });
-        const content = right.createDiv({ cls: 'plan-week-content' });
-        this.contentEl = content;
-
-        // 左侧列：本周描述方框 + 近 14 天执行时长柱形图方框
-        const side = content.createDiv({ cls: 'plan-week-side' });
-        // 本周具体描述：多行文本域，失焦保存
-        const descBox = side.createDiv({ cls: 'plan-week-desc' });
-        descBox.createDiv({ cls: 'plan-week-desc-title', text: t('panel.planWeekDescription') });
-        this.descEl = descBox.createEl('textarea', {
-            cls: 'plan-week-desc-input',
-            attr: { placeholder: t('panel.planWeekDescriptionPlaceholder') },
-        });
-        this.descEl.addEventListener('blur', () => this.saveDescription());
-        // 近 14 天执行时长柱形图：绘制选中任务每天的累计执行时长
-        this.chartEl = side.createDiv({ cls: 'plan-week-chart' });
-
-        // 每日具体目标：与任务详情「一周目标」样式一致
-        this.dayListEl = content.createDiv({ cls: 'plan-week-days' });
-
-        // 七列网格（排布一周模式）：选中左侧任务后点击某天排布，与习惯面板周视图的网格样式一致
         this.dayGridEl = right.createDiv({ cls: 'plan-week-day-grid' });
 
         // 日目标悬浮预览：挂在面板根节点上（不放在滚动网格内，避免被列区域裁剪）
         this.dayGoalTipEl = this.element.createDiv({ cls: 'plan-week-daygoal-tip' });
 
-        this.syncMode();
         this.renderAll();
-    }
-
-    /** 切换模式：填写日目标（描述 + 图表 + 每日目标）/ 排布一周（七列任务排布） */
-    private switchMode(mode: 'schedule' | 'dayGoal'): void {
-        if (this.viewMode === mode) return;
-        this.viewMode = mode;
-        this.syncMode();
-        this.renderAll();
-    }
-
-    /** 按当前模式显示 / 隐藏内容区与七列网格，并同步按钮激活态 */
-    private syncMode(): void {
-        this.contentEl.toggleClass('is-hidden', this.viewMode !== 'dayGoal');
-        this.dayGridEl.toggleClass('is-hidden', this.viewMode !== 'schedule');
-        this.scheduleButtonEl.toggleClass('is-active', this.viewMode === 'schedule');
-        this.dayGoalButtonEl.toggleClass('is-active', this.viewMode === 'dayGoal');
-    }
-
-    /** 左侧顶部的模式按钮（图标 + 文字） */
-    private createModeButton(parentEl: HTMLElement, icon: string, label: string): HTMLButtonElement {
-        const button = parentEl.createEl('button', { cls: 'plan-week-mode-btn', attr: { type: 'button' } });
-        setIcon(button.createSpan({ cls: 'plan-week-mode-btn-icon' }), icon);
-        button.createSpan({ cls: 'plan-week-mode-btn-label', text: label });
-        return button;
     }
 
     /** 重绘全部区域（周切换后调用） */
     private renderAll(): void {
-        // 切换周 / 模式时浮层对应的日期已失效，先关闭
+        // 切换周后浮层对应的日期已失效，先关闭
         this.closeDayGoalEditor();
         this.renderNav();
         this.renderSummary();
         this.renderTasks();
-        this.renderDescription();
-        this.renderDays();
+        this.renderBottom();
         this.renderDayGrid();
     }
 
@@ -256,7 +198,6 @@ export class PlanWeekPanel extends FloatingPanel {
     /** 左侧任务列表：本周已整周排布的任务（点击选中 / 再次点击取消选中） */
     private renderTasks(): void {
         this.renderSelectedTask();
-        this.renderChart();
         this.taskListEl.empty();
         const tasks = this.plannedTasks();
         if (tasks.length === 0) {
@@ -282,8 +223,7 @@ export class PlanWeekPanel extends FloatingPanel {
             row.addEventListener('click', () => {
                 this.selectedTaskId = this.selectedTaskId === task.id ? undefined : task.id;
                 this.renderTasks();
-                this.renderDescription();
-                this.renderDays();
+                this.renderBottom();
                 this.renderDayGrid();
             });
         }
@@ -313,59 +253,6 @@ export class PlanWeekPanel extends FloatingPanel {
         if (!task) return;
         this.selectedEl.createSpan({ cls: 'plan-week-selected-label', text: t('panel.planWeekSelectedTask') });
         this.selectedEl.createSpan({ cls: 'plan-week-selected-name', text: task.name });
-    }
-
-    /** 近 14 天执行时长柱形图：每天一根柱，柱高按当天累计执行时长占最大值的比例 */
-    private renderChart(): void {
-        this.chartEl.empty();
-        const head = this.chartEl.createDiv({ cls: 'plan-week-chart-head' });
-        head.createSpan({ cls: 'plan-week-chart-title', text: t('panel.planWeekChartTitle') });
-        const task = this.selectedTask();
-        if (!task) {
-            this.chartEl.createDiv({ cls: 'plan-week-chart-empty', text: t('panel.planWeekNoTask') });
-            return;
-        }
-        // 最近 14 天（含今天），按日键聚合执行记录
-        const days: string[] = [];
-        const today = new Date();
-        for (let offset = 13; offset >= 0; offset -= 1) {
-            days.push(makeDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)));
-        }
-        const secondsByDay: Record<string, number> = {};
-        for (const record of this.panelOptions.taskExecutionRepo.records) {
-            if (record.taskId !== task.id) continue;
-            const dayKey = makeDayKey(new Date(record.startAt));
-            if (!days.includes(dayKey)) continue;
-            secondsByDay[dayKey] = (secondsByDay[dayKey] ?? 0) + record.durationSeconds;
-        }
-        const values = days.map((dayKey) => secondsByDay[dayKey] ?? 0);
-        const max = Math.max(1, ...values);
-        const total = values.reduce((sum, value) => sum + value, 0);
-        head.createSpan({ cls: 'plan-week-chart-total', text: this.formatDuration(total) });
-        const body = this.chartEl.createDiv({ cls: 'plan-week-chart-body' });
-        for (let index = 0; index < days.length; index += 1) {
-            const column = body.createDiv({ cls: 'plan-week-chart-col' });
-            column.title = `${this.formatDayLabel(days[index])} · ${this.formatDuration(values[index])}`;
-            const bar = column.createDiv({ cls: 'plan-week-chart-bar' });
-            if (values[index] <= 0) {
-                bar.addClass('is-empty');
-                bar.style.height = '2px';
-            } else {
-                bar.style.height = `${Math.max(2, (values[index] / max) * 100)}%`;
-            }
-        }
-        const foot = this.chartEl.createDiv({ cls: 'plan-week-chart-foot' });
-        foot.createSpan({ text: this.formatDayLabel(days[0]) });
-        foot.createSpan({ text: this.formatDayLabel(days[days.length - 1]) });
-    }
-
-    /** 秒数格式化为「Xh Ym」/「Xm」 */
-    private formatDuration(seconds: number): string {
-        if (seconds <= 0) return '0m';
-        const totalMinutes = Math.max(1, Math.round(seconds / 60));
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
     }
 
     /** 日键（YYYY-MM-DD）格式化为 M/D */
@@ -488,8 +375,7 @@ export class PlanWeekPanel extends FloatingPanel {
             const index = Math.max(0, Math.min(span - 1, Math.floor((evt.clientX - rect.left) / columnWidth)));
             this.selectedTaskId = task.id;
             this.renderTasks();
-            this.renderDescription();
-            this.renderDays();
+            this.renderBottom();
             this.renderDayGrid();
             this.openDayGoalEditor(task.id, start + index, rect, index, span);
         });
@@ -529,8 +415,7 @@ export class PlanWeekPanel extends FloatingPanel {
             this.panelOptions.onChanged?.();
             this.renderDayGrid();
             this.renderTasks();
-            this.renderDescription();
-            this.renderDays();
+            this.renderBottom();
         });
     }
 
@@ -730,25 +615,81 @@ export class PlanWeekPanel extends FloatingPanel {
         return result;
     }
 
-    /** 本周目标：按当前选中任务与当前周读取；未选中任务时禁用并提示先选择任务 */
-    private renderDescription(): void {
+    /** 左侧底栏：选中任务时显示并允许编辑本周描述；未选中任务时显示本周各分类计划时长 */
+    private renderBottom(): void {
+        this.bottomEl.empty();
+        this.descEl = undefined;
         const task = this.selectedTask();
-        this.descEl.disabled = !task;
-        this.descEl.toggleClass('is-disabled', !task);
         if (!task) {
-            this.descEl.value = '';
-            this.descEl.placeholder = t('panel.planWeekNoTask');
+            this.renderWeekCategoryBars();
             return;
         }
-        this.descEl.placeholder = t('panel.planWeekDescriptionPlaceholder');
+        const box = this.bottomEl.createDiv({ cls: 'plan-week-desc' });
+        box.createDiv({ cls: 'plan-week-desc-title', text: t('panel.planWeekDescription') });
+        this.descEl = box.createEl('textarea', {
+            cls: 'plan-week-desc-input',
+            attr: { placeholder: t('panel.planWeekDescriptionPlaceholder') },
+        });
         this.migrateLegacyWeekNote(task);
         this.descEl.value = task.weekGoals?.[this.weekKey] ?? '';
+        this.descEl.addEventListener('blur', () => this.saveDescription());
+    }
+
+    /** 本周各分类计划时长：时间盒格子按分类累加（每格 1 小时），未匹配到分类的归入未分类 */
+    private renderWeekCategoryBars(): void {
+        const wrap = this.bottomEl.createDiv({ cls: 'plan-week-cat-bars check-cat-bars' });
+        wrap.createDiv({ cls: 'check-cat-bars-title', text: t('panel.planWeekCategoryTitle') });
+
+        const cats = this.panelOptions.getCategories();
+        const knownIds = new Set(cats.map((cat) => cat.id));
+        const minutesByCat = new Map<string, number>();
+        for (const cell of this.panelOptions.timeBoxRepo.weekCells(this.weekKey)) {
+            const catId = cell.categoryId && knownIds.has(cell.categoryId)
+                ? cell.categoryId
+                : UNCATEGORIZED_CATEGORY_ID;
+            minutesByCat.set(catId, (minutesByCat.get(catId) ?? 0) + 60);
+        }
+        const rows = [
+            ...cats.map((cat) => ({
+                id: cat.id,
+                label: cat.label,
+                color: cat.color,
+                minutes: minutesByCat.get(cat.id) ?? 0,
+            })),
+            ...(minutesByCat.has(UNCATEGORIZED_CATEGORY_ID)
+                ? [{
+                    id: UNCATEGORIZED_CATEGORY_ID,
+                    label: t('inbox.noCategory'),
+                    color: '#888888',
+                    minutes: minutesByCat.get(UNCATEGORIZED_CATEGORY_ID) ?? 0,
+                }]
+                : []),
+        ];
+        const maxMinutes = Math.max(0, ...rows.map((row) => row.minutes));
+
+        for (const row of rows) {
+            const rowEl = wrap.createDiv({ cls: 'check-cat-bars-row' });
+            rowEl.createSpan({ cls: 'check-cat-bars-dot' }).style.background = row.color ?? '#888888';
+            rowEl.createSpan({ cls: 'check-cat-bars-label', text: row.label });
+            const track = rowEl.createDiv({ cls: 'check-cat-bars-track is-plain' });
+            track.createDiv({ cls: 'check-cat-bars-fill' }).setCssProps({
+                '--fill-color': row.color ?? '#888888',
+                '--fill-width': `${maxMinutes > 0 ? (row.minutes / maxMinutes) * 100 : 0}%`,
+            });
+            rowEl.createSpan({ cls: 'check-cat-bars-value', text: this.formatMinutesShort(row.minutes) });
+        }
+    }
+
+    /** 分钟数格式化为「Xh」/「Xm」（与检查面板分类时长一致） */
+    private formatMinutesShort(minutes: number): string {
+        if (minutes >= 60) return `${Number((minutes / 60).toFixed(1))}h`;
+        return `${Math.round(minutes)}m`;
     }
 
     /** 保存本周目标到选中任务的 weekGoals（未选中任务或内容未变化时不写入） */
     private saveDescription(): void {
         const task = this.selectedTask();
-        if (!task) return;
+        if (!task || !this.descEl) return;
         const next = this.descEl.value.trim();
         if (next === (task.weekGoals?.[this.weekKey] ?? '')) return;
         const goals = { ...(task.weekGoals ?? {}) };
@@ -774,120 +715,6 @@ export class PlanWeekPanel extends FloatingPanel {
         repo.setWeekNote(this.weekKey, '');
         void this.panelOptions.save();
         this.panelOptions.onChanged?.();
-    }
-
-    /** 未选中任务时显示提示，选中后渲染周一到周日 7 个方框 */
-    private renderDays(): void {
-        this.dayListEl.empty();
-        const task = this.selectedTask();
-        if (!task) {
-            this.dayListEl.createDiv({ cls: 'plan-week-days-empty', text: t('panel.planWeekNoTask') });
-            return;
-        }
-        for (let day = 1; day <= 7; day += 1) {
-            const dayKey = makeDayKeyFromWeek(this.weekKey, day);
-            this.renderDay(task, dayKey, day, t(WEEKDAY_LABEL_KEYS[day - 1]));
-        }
-    }
-
-    /** 单日方框：左侧星期标题（右上角 + 按钮），右侧日目标勾选列表；未排布到该天时整体禁用 */
-    private renderDay(task: PrototypeTask, dayKey: string, weekday: number, weekdayLabel: string): void {
-        const scheduled = this.panelOptions.planAssignmentRepo.dayAssignments(this.weekKey, weekday)
-            .some((assignment) => assignment.taskId === task.id);
-        const box = this.dayListEl.createDiv({ cls: 'task-week-goal-day' });
-        if (dayKey === getCurrentDayKey()) box.addClass('is-today');
-        box.toggleClass('is-disabled', !scheduled);
-
-        const head = box.createDiv({ cls: 'task-week-goal-day-head' });
-        head.createSpan({ cls: 'task-week-goal-day-name', text: weekdayLabel });
-        head.createSpan({
-            cls: 'task-week-goal-day-date',
-            text: `${Number(dayKey.slice(5, 7))}/${Number(dayKey.slice(8, 10))}`,
-        });
-
-        const body = box.createDiv({ cls: 'task-week-goal-day-body' });
-        const toolbar = body.createDiv({ cls: 'task-week-goal-day-toolbar' });
-        const toolbarLabel = toolbar.createSpan({
-            cls: 'task-week-goal-day-toolbar-label',
-            text: scheduled ? t('panel.planWeekDayScheduled') : t('panel.planWeekDayNotScheduled'),
-        });
-        toolbarLabel.toggleClass('is-scheduled', scheduled);
-        const addBtn = toolbar.createEl('button', {
-            cls: 'task-week-goal-day-add',
-            attr: { type: 'button', 'aria-label': t('common.add') },
-        });
-        setIcon(addBtn, 'plus');
-        addBtn.disabled = !scheduled;
-        if (scheduled) addBtn.addEventListener('click', () => this.startAddDayGoal(task, body, dayKey));
-
-        body.createDiv({ cls: 'task-week-goal-day-divider' });
-
-        const list = body.createDiv({ cls: 'task-week-goal-day-list' });
-        const entries = task.dayGoals?.[dayKey] ?? [];
-        if (entries.length === 0) {
-            list.createDiv({ cls: 'task-week-goal-day-empty', text: t('panel.weekGoalEmpty') });
-        }
-        for (const entry of entries) {
-            const row = list.createDiv({ cls: 'task-week-goal-item' });
-            row.toggleClass('is-done', entry.done === true);
-            const checkbox = row.createEl('input', { cls: 'task-week-goal-item-check' });
-            checkbox.type = 'checkbox';
-            checkbox.checked = entry.done === true;
-            checkbox.disabled = !scheduled;
-            if (scheduled) {
-                checkbox.addEventListener('change', () => {
-                    void this.toggleDayGoal(task, dayKey, entry.id, checkbox.checked);
-                });
-            }
-            row.createSpan({ cls: 'task-week-goal-item-text', text: entry.text });
-            const delBtn = row.createEl('button', {
-                cls: 'task-week-goal-item-delete',
-                attr: { type: 'button', 'aria-label': t('common.delete') },
-            });
-            setIcon(delBtn, 'x');
-            delBtn.disabled = !scheduled;
-            if (scheduled) delBtn.addEventListener('click', () => void this.removeDayGoal(task, dayKey, entry.id));
-        }
-    }
-
-    /** 在列表末尾插入一个输入行，回车 / 失焦提交，Esc 取消 */
-    private startAddDayGoal(task: PrototypeTask, body: HTMLElement, dayKey: string): void {
-        // 已有输入行时不重复创建，直接聚焦
-        const existing = body.querySelector<HTMLInputElement>('.task-week-goal-add-input');
-        if (existing) {
-            existing.focus();
-            return;
-        }
-        const list = body.querySelector<HTMLElement>('.task-week-goal-day-list');
-        if (!list) return;
-        list.querySelector('.task-week-goal-day-empty')?.remove();
-
-        const inputRow = list.createDiv({ cls: 'task-week-goal-add-row' });
-        const input = inputRow.createEl('input', {
-            cls: 'task-week-goal-add-input',
-            attr: { type: 'text', placeholder: t('panel.weekGoalAddPlaceholder') },
-        });
-        input.focus();
-
-        let finished = false;
-        const finish = (commit: boolean): void => {
-            if (finished) return;
-            finished = true;
-            const text = input.value.trim();
-            inputRow.remove();
-            if (commit && text) void this.addDayGoal(task, dayKey, text);
-            else this.renderDays();
-        };
-        input.addEventListener('keydown', (evt) => {
-            if (evt.key === 'Enter') {
-                evt.preventDefault();
-                finish(true);
-            } else if (evt.key === 'Escape') {
-                evt.preventDefault();
-                finish(false);
-            }
-        });
-        input.addEventListener('blur', () => finish(true));
     }
 
     /** 新增日目标（写入选中任务的 dayGoals，与任务详情「一周目标」共享） */
@@ -932,9 +759,8 @@ export class PlanWeekPanel extends FloatingPanel {
         this.afterDayGoalChanged();
     }
 
-    /** 日目标变更后刷新相关区域：每日目标方框 + 七列卡片标识 + 编辑浮层内容 */
+    /** 日目标变更后刷新相关区域：七列卡片标识 + 编辑浮层内容 */
     private afterDayGoalChanged(): void {
-        this.renderDays();
         this.renderDayGrid();
         if (this.dayGoalEditorEl) this.renderDayGoalEditor();
     }

@@ -250,6 +250,12 @@ export class PlanAnnualPanel extends FloatingPanel {
         super.open();
     }
 
+    /** 外部任务数据变化（如任务详情面板增删目标）后刷新：重建根任务下拉、任务树与底部目标区 */
+    refresh(): void {
+        if (!this.isOpen) return;
+        this.refreshRootSelect();
+    }
+
     /** 关闭面板时清理拖拽残留 */
     override close(): void {
         this.cancelDrag();
@@ -293,6 +299,8 @@ export class PlanAnnualPanel extends FloatingPanel {
             this.renderTree();
             this.renderGoalList();
             this.renderLanes();
+            // 底部目标区绑定当前根任务，切换后必须同步重绘，否则会残留上一个根任务的目标
+            this.renderGoalLanes();
             this.updateDetailButton();
         });
         this.treeEl = left.createDiv({ cls: 'plan-annual-tree' });
@@ -593,6 +601,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.renderNav();
         this.renderHeader();
         this.renderLanes();
+        // 季度变化后目标所属周列已变，底部目标区同步重绘
+        this.renderGoalLanes();
         this.renderGoalLanes();
     }
 
@@ -627,10 +637,7 @@ export class PlanAnnualPanel extends FloatingPanel {
             }))
             .filter((item) => item.index >= 0)
             .sort((a, b) => a.index - b.index || a.goal.createdAt - b.goal.createdAt);
-        if (placed.length === 0) {
-            this.goalEl.createDiv({ cls: 'plan-annual-goal-empty', text: t('panel.planAnnualNoGoal') });
-            return;
-        }
+        if (placed.length === 0) return;
         // 同一周已有目标时换到下一行，避免互相遮挡
         const lanes: number[] = [];
         const rows = placed.map((item) => {
@@ -1465,6 +1472,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         this.renderNav();
         this.renderHeader();
         this.renderLanes();
+        // 季度变化后目标所属周列已变，底部目标区同步重绘
+        this.renderGoalLanes();
         // 重绘后行元素已重建，重新定位拖拽所属行
         const rowEl = this.laneEl.querySelector<HTMLElement>(
             `.plan-annual-lane-row[data-task-id="${drag.taskId}"]`,
