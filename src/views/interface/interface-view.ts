@@ -41,6 +41,7 @@ import { applyThemeColors, setCurrentThemeColors } from '../../themestory/theme-
 import type { PlanCategoryData } from '../../shared/plan-category-manager';
 import { getCurrentWeekKey, getISOWeek, makeDayKey, makeWeekKey } from '../../shared/plan-data';
 import { renameTaskDir, sanitizeFolderName } from '../../shared/task-library';
+import { getTaskFileDir } from '../../shared/task-sections';
 
 /** 界面视图配置 */
 export interface InterfaceViewOptions {
@@ -612,9 +613,10 @@ export class InterfaceView {
 
     /** 任务所在目录：优先取任务文件目录的父级，尚未生成时按任务树规则给出预计路径 */
     private taskDirOf(task: PrototypeTask): string {
-        if (task.fileDir) {
-            const index = task.fileDir.lastIndexOf('/');
-            return index >= 0 ? task.fileDir.slice(0, index) : task.fileDir;
+        const fileDir = getTaskFileDir(task);
+        if (fileDir) {
+            const index = fileDir.lastIndexOf('/');
+            return index >= 0 ? fileDir.slice(0, index) : fileDir;
         }
         const root = this.baseRepo.taskLibraryRoot;
         return root ? `${root}/${sanitizeFolderName(task.name)}` : '';

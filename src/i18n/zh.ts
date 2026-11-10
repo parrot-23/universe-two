@@ -190,6 +190,7 @@ export const zh = {
     'panel.noDescription': '暂无描述',
     'panel.sideTaskBadge': '支线任务',
     'panel.targetChecklist': '清单',
+    'panel.sectionRemove': '移除板块',
     'panel.targetFormCheck': '表单打卡',
     'panel.targetOkr': 'OKR篮子',
     'panel.checklistAddPlaceholder': '输入清单条目',

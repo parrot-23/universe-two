@@ -20,6 +20,7 @@ import {
     shiftWeekKey,
 } from '../../../shared/plan-data';
 import { applyThemeColors, getCurrentThemeColors } from '../../../themestory/theme-colors';
+import { getTaskGoals, getWeekNote, setTaskGoals, setWeekNote } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 计划年度面板配置 */
@@ -360,7 +361,7 @@ export class PlanAnnualPanel extends FloatingPanel {
     private renderGoalList(): void {
         this.goalListEl.empty();
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
-        const goals = rootTask?.goals ?? [];
+        const goals = rootTask ? getTaskGoals(rootTask) : [];
         // 选中的目标已不存在时清空选中态
         if (this.selectedGoalId && !goals.some((goal) => goal.id === this.selectedGoalId)) {
             this.selectedGoalId = undefined;
@@ -415,10 +416,10 @@ export class PlanAnnualPanel extends FloatingPanel {
                     this.renderGoalList();
                     return;
                 }
-                rootTask.goals = [
-                    ...(rootTask.goals ?? []),
+                setTaskGoals(rootTask, [
+                    ...getTaskGoals(rootTask),
                     { id: `goal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, text, createdAt: Date.now() },
-                ];
+                ]);
                 void this.panelOptions.save();
                 this.renderGoalList();
                 this.panelOptions.onChanged?.();
@@ -628,7 +629,7 @@ export class PlanAnnualPanel extends FloatingPanel {
 
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         // 已分配且落在当前季度内的目标，按周从左到右排序（同周按创建时间）
-        const placed = (rootTask?.goals ?? [])
+        const placed = (rootTask ? getTaskGoals(rootTask) : [])
             .map((goal) => ({
                 goal,
                 index: goal.startWeek
@@ -663,8 +664,8 @@ export class PlanAnnualPanel extends FloatingPanel {
     /** 点击底部目标格子：有选中目标时直接分配（同周再点取消），否则打开新增目标浮层 */
     private handleGoalCellClick(week: QuarterWeek, cell: HTMLElement): void {
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
-        const goal = this.selectedGoalId
-            ? (rootTask?.goals ?? []).find((item) => item.id === this.selectedGoalId)
+        const goal = this.selectedGoalId && rootTask
+            ? getTaskGoals(rootTask).find((item) => item.id === this.selectedGoalId)
             : undefined;
         if (!goal) {
             this.openGoalEditor(week, cell);
@@ -748,7 +749,7 @@ export class PlanAnnualPanel extends FloatingPanel {
         });
         const list = editor.createDiv({ cls: 'plan-annual-goal-editor-list' });
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
-        const goals = (rootTask?.goals ?? [])
+        const goals = (rootTask ? getTaskGoals(rootTask) : [])
             .filter((goal) => goal.startWeek === weekKey)
             .sort((a, b) => a.createdAt - b.createdAt);
         if (goals.length === 0) {
@@ -772,8 +773,8 @@ export class PlanAnnualPanel extends FloatingPanel {
         if (!text) return;
         const rootTask = this.panelOptions.getTasks().find((task) => task.id === this.rootTaskId);
         if (!rootTask) return;
-        rootTask.goals = [
-            ...(rootTask.goals ?? []),
+        setTaskGoals(rootTask, [
+            ...getTaskGoals(rootTask),
             {
                 id: `goal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
                 text,
@@ -781,7 +782,7 @@ export class PlanAnnualPanel extends FloatingPanel {
                 startWeek: weekKey,
                 endWeek: weekKey,
             },
-        ];
+        ]);
         void this.panelOptions.save();
         this.renderGoalLanes();
         this.renderGoalList();
@@ -910,7 +911,7 @@ export class PlanAnnualPanel extends FloatingPanel {
                 const cell = barEl.createDiv({ cls: 'plan-annual-bar-cell' });
                 cell.style.left = `${(offset / weekSpan) * 100}%`;
                 cell.style.width = `${(1 / weekSpan) * 100}%`;
-                if ((task.weekGoals?.[weekKey] ?? '').trim()) {
+                if (getWeekNote(task, weekKey).trim()) {
                     cell.addClass('has-week-goal');
                     cell.createSpan({ cls: 'plan-annual-bar-weekgoal-mark' });
                 }
@@ -934,7 +935,7 @@ export class PlanAnnualPanel extends FloatingPanel {
                     return;
                 }
                 const weekKey = barWeeks[index].weekKey;
-                const desc = (task.weekGoals?.[weekKey] ?? '').trim();
+                const desc = getWeekNote(task, weekKey).trim();
                 if (!desc) {
                     this.closeWeekGoalTip();
                     return;
@@ -1166,7 +1167,7 @@ export class PlanAnnualPanel extends FloatingPanel {
             cls: 'plan-annual-weekgoal-editor-input',
             attr: { placeholder: t('panel.planWeekDescriptionPlaceholder') },
         });
-        textarea.value = task.weekGoals?.[weekKey] ?? '';
+        textarea.value = getWeekNote(task, weekKey);
 
         const commit = (): void => {
             this.saveWeekGoal(task, weekKey, textarea.value);
@@ -1221,18 +1222,8 @@ export class PlanAnnualPanel extends FloatingPanel {
     /** 保存某一周的本周描述（为空时删除），并刷新泳道 */
     private saveWeekGoal(task: PrototypeTask, weekKey: string, raw: string): void {
         const next = raw.trim();
-        if (next === (task.weekGoals?.[weekKey] ?? '')) return;
-        const goals = { ...(task.weekGoals ?? {}) };
-        if (next) {
-            goals[weekKey] = next;
-        } else {
-            delete goals[weekKey];
-        }
-        if (Object.keys(goals).length > 0) {
-            task.weekGoals = goals;
-        } else {
-            delete task.weekGoals;
-        }
+        if (next === getWeekNote(task, weekKey)) return;
+        setWeekNote(task, weekKey, next);
         void this.panelOptions.save();
         this.renderLanes();
         this.panelOptions.onChanged?.();

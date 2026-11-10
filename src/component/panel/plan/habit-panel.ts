@@ -6,6 +6,7 @@ import type { PrototypeTask, TaskHabit } from '../../../datatypes/prototype-task
 import { t } from '../../../i18n';
 import type { PlanCategory } from '../../../shared/plan-category-manager';
 import { getCurrentWeekKey, makeDayKeyFromWeek } from '../../../shared/plan-data';
+import { getTaskHabit, setTaskHabit } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 习惯面板配置 */
@@ -176,7 +177,7 @@ export class HabitPanel extends FloatingPanel {
      */
     private renderTrailingIcon(row: HTMLElement, task: PrototypeTask): void {
         row.querySelector('.plan-tree-status-icon')?.remove();
-        if (!task.habit?.enabled) return;
+        if (!getTaskHabit(task)?.enabled) return;
         const statusEl = row.createSpan({ cls: 'plan-tree-status-icon' });
         setIcon(statusEl, 'repeat');
     }
@@ -299,12 +300,12 @@ export class HabitPanel extends FloatingPanel {
 
     /** 读取任务习惯设置（未设置时返回默认值） */
     private getHabit(task: PrototypeTask): TaskHabit {
-        return task.habit ?? { enabled: false, time: '09:00', weekdays: [1, 2, 3, 4, 5, 6, 7] };
+        return getTaskHabit(task) ?? { enabled: false, time: '09:00', weekdays: [1, 2, 3, 4, 5, 6, 7] };
     }
 
     /** 写入任务习惯设置并持久化 */
     private saveHabit(task: PrototypeTask, patch: Partial<TaskHabit>): void {
-        task.habit = { ...this.getHabit(task), ...patch };
+        setTaskHabit(task, { ...this.getHabit(task), ...patch });
         void this.panelOptions.save();
         // 习惯卡片变化后同步重绘周日历
         this.renderPane();
@@ -367,12 +368,12 @@ export class HabitPanel extends FloatingPanel {
         lane: number;
     }[] {
         const habits = this.panelOptions.getTasks()
-            .filter((task): task is PrototypeTask & { habit: TaskHabit } => task.habit?.enabled === true)
+            .map((task) => ({ task, habit: getTaskHabit(task) }))
+            .filter((item): item is { task: PrototypeTask; habit: TaskHabit } => item.habit?.enabled === true)
             .sort((a, b) => a.habit.time.localeCompare(b.habit.time)
-                || a.name.localeCompare(b.name));
+                || a.task.name.localeCompare(b.task.name));
         const segments: { task: PrototypeTask; habit: TaskHabit; start: number; end: number; lane: number }[] = [];
-        habits.forEach((task, lane) => {
-            const { habit } = task;
+        habits.forEach(({ task, habit }, lane) => {
             const days = Array.from(new Set(habit.weekdays))
                 .filter((day) => day >= 1 && day <= 7)
                 .sort((a, b) => a - b);

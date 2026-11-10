@@ -1,24 +1,15 @@
 // 任务详情面板：基于 FloatingPanel，展示单个原型任务的详情。
 // 左侧：类型标题行（主线任务 / 支线任务）+ 添加按钮，下方为后代任务树；
-// 右侧：任务名称 / 分类 / 描述 + 归属分区选项卡。
-import { Notice, TFolder, setIcon, type App, type TFile } from 'obsidian';
+// 右侧：任务名称 / 分类 / 描述 + 任务板块（与任务板块面板共用 SectionHost）。
+import { setIcon, type App } from 'obsidian';
 
-import type { ChecklistItem } from '../../../datatypes/domain';
-import type { PrototypeTask, TaskDayGoalEntry } from '../../../datatypes/prototype-task';
-import { getLang, t } from '../../../i18n';
+import type { PrototypeTask } from '../../../datatypes/prototype-task';
+import { t } from '../../../i18n';
 import type { PlanCategoryData } from '../../../shared/plan-category-manager';
 import { UNCATEGORIZED_CATEGORY_ID } from '../../../shared/plan-category-manager';
-import {
-    getCurrentDayKey,
-    getCurrentWeekKey,
-    makeDayKeyFromWeek,
-    parseWeekKey,
-    shiftWeekKey,
-} from '../../../shared/plan-data';
-import { buildTaskFileName, listTaskFiles, relativeToDir } from '../../../shared/task-file';
-import { ensureTaskFileDir, revealFolderInExplorer } from '../../../shared/task-library';
+import { getTaskGoals } from '../../../shared/task-sections';
 import { applyThemeColors, getCurrentThemeColors } from '../../../themestory/theme-colors';
-import { FileEditorPanel } from '../basic/file-editor-panel';
+import { SectionHost } from '../../section/section-host';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 任务详情面板配置 */
@@ -51,13 +42,6 @@ export interface TaskDetailPanelOptions extends Omit<FloatingPanelOptions, 'titl
     onOpenConfig?: (task: PrototypeTask) => void;
 }
 
-/** 右侧分区选项卡：showCount 为 true 时在标签后显示条目数量占位 */
-const SECTIONS: { labelKey: Parameters<typeof t>[0]; showCount?: boolean }[] = [
-    { labelKey: 'panel.weekGoalTab' },
-    { labelKey: 'panel.targetChecklist', showCount: true },
-    { labelKey: 'panel.targetFile', showCount: true },
-];
-
 /** 任务树每层缩进像素（与行 marginLeft 一致） */
 const TREE_DEPTH_INDENT = 14;
 /** 长按进入拖动的等待时间（毫秒） */
@@ -71,28 +55,12 @@ export class TaskDetailPanel extends FloatingPanel {
     private treeEl!: HTMLElement;
     private addFormEl!: HTMLElement;
     private inputEl!: HTMLInputElement;
-    /** 右侧分区滚动容器 */
+    /** 右侧板块容器 */
     private sectionsEl!: HTMLElement;
-    /** 顶部选项卡 */
-    private tabs: HTMLElement[] = [];
+    /** 板块宿主（与任务板块面板共用） */
+    private sectionHost!: SectionHost;
     /** 当前选中的任务 id（决定 + 按钮在哪个任务下新增子任务），默认根任务；取消选中时为 undefined */
     private selectedTaskId: string | undefined;
-    /** 清单内容容器 */
-    private checklistBodyEl: HTMLElement | null = null;
-    /** 清单选项卡的未完成数量标签 */
-    private checklistCountEl: HTMLElement | null = null;
-    /** 清单排序方式：创建顺序 / 截止时间 */
-    private checklistSort: 'created' | 'due' = 'created';
-    /** 清单中当前选中的条目 id（用于设置截止时间） */
-    private selectedChecklistId: string | null = null;
-    /** 任务文件内容容器 */
-    private filesBodyEl: HTMLElement | null = null;
-    /** 任务文件选项卡的文件数量标签 */
-    private fileCountEl: HTMLElement | null = null;
-    /** 任务文件是否处于新建文件输入状态 */
-    private fileCreateMode = false;
-    /** 文件编辑面板（复用同一实例，切换文件时销毁重建） */
-    private fileEditorPanel: FileEditorPanel | null = null;
     /** 左侧底部工具栏：表单打卡按钮 */
     private formButtonEl!: HTMLButtonElement;
     /** 右侧底部设置面板（表单打卡） */
@@ -115,8 +83,6 @@ export class TaskDetailPanel extends FloatingPanel {
     private categoryMenuEscapeHandler?: (evt: KeyboardEvent) => void;
     /** 右侧容器（切换左侧选中任务时整体重建） */
     private rightEl!: HTMLElement;
-    /** 当前选中的归属分区索引（切换任务后保持不变） */
-    private currentSection = 0;
     /** 面板打开时的根任务 id（左侧任务树始终以它为根，不随右侧切换变化） */
     private rootTaskId: string;
     /** 左侧顶部的根任务下拉（可切换任务树的根） */
@@ -125,8 +91,6 @@ export class TaskDetailPanel extends FloatingPanel {
     private activeInlineEditAbort: (() => void) | null = null;
     /** 拖动结束后抑制一次点击，避免误选中 */
     private suppressTreeClick = false;
-    /** 「一周目标」选项卡当前查看的周键（默认本周） */
-    private weekGoalWeekKey: string = getCurrentWeekKey();
 
     constructor(options: TaskDetailPanelOptions) {
         super({
@@ -141,13 +105,20 @@ export class TaskDetailPanel extends FloatingPanel {
         this.tasks = options.tasks ?? [];
         this.selectedTaskId = options.task.id;
         this.rootTaskId = options.task.id;
+        this.sectionHost = new SectionHost({
+            app: options.app,
+            getTask: () => this.task,
+            getTasks: () => this.tasks,
+            getTaskLibraryRoot: options.getTaskLibraryRoot,
+            save: options.save,
+            container: options.container,
+        });
         this.renderContent();
     }
 
-    /** 每次打开时刷新清单 / 任务文件（数据可能被其它入口改动） */
+    /** 每次打开时刷新板块内容（数据可能被其它入口改动） */
     override open(): void {
-        if (this.checklistBodyEl?.isConnected) this.renderChecklist(this.checklistBodyEl);
-        if (this.filesBodyEl?.isConnected) this.renderFiles(this.filesBodyEl);
+        if (this.sectionsEl?.isConnected) this.sectionHost.render();
         this.renderSettingPanel();
         super.open();
     }
@@ -163,6 +134,7 @@ export class TaskDetailPanel extends FloatingPanel {
     override destroy(): void {
         this.closeDeleteConfirm();
         this.closeCategoryMenu();
+        this.sectionHost?.destroy();
         super.destroy();
     }
 
@@ -294,19 +266,17 @@ export class TaskDetailPanel extends FloatingPanel {
             () => this.toggleSetting(),
         );
 
-        // 右侧：任务信息（名称 / 分类 / 描述）+ 归属分区选项卡（切换左侧选中任务时整体重建）
+        // 右侧：任务信息（名称 / 分类 / 描述）+ 任务板块（切换左侧选中任务时整体重建）
         this.rightEl = body.createDiv({ cls: 'task-detail-right' });
         this.renderRightPane();
     }
 
-    /** 重建右侧内容：任务信息行 + 归属分区选项卡 + 底部设置面板 */
+    /** 重建右侧内容：任务信息行 + 任务板块 + 底部设置面板 */
     private renderRightPane(): void {
         this.closeDeleteConfirm();
         this.closeCategoryMenu();
         const right = this.rightEl;
         right.empty();
-        this.tabs = [];
-        this.currentSection = Math.min(this.currentSection, SECTIONS.length - 1);
 
         // 第一、二行：任务名称 + 分类，右侧为跨两行的「归档 / 删除」方块按钮
         const headBlock = right.createDiv({ cls: 'task-detail-head-block' });
@@ -375,36 +345,12 @@ export class TaskDetailPanel extends FloatingPanel {
             });
         });
 
-        // 第三行：归属分区选项卡
-        const tabsEl = right.createDiv({ cls: 'task-detail-tabs' });
+        // 板块区：已落库板块 + 未创建板块胶囊（与任务板块面板共用 SectionHost）
         this.sectionsEl = right.createDiv({ cls: 'task-detail-sections' });
+        this.sectionHost.render(this.sectionsEl);
         // 右侧底部：设置面板（默认隐藏，由左侧工具栏按钮控制）
         this.settingPanelEl = right.createDiv({ cls: 'task-detail-setting-panel is-hidden' });
 
-        for (const section of SECTIONS) {
-            const index = this.tabs.length;
-            const label = t(section.labelKey);
-            const tab = tabsEl.createDiv({ cls: 'task-detail-tab' });
-            tab.createSpan({ text: section.showCount ? `${label} ` : label });
-            if (section.showCount) {
-                const countEl = tab.createSpan({
-                    cls: 'task-detail-tab-count',
-                    text: `(${this.sectionCount(index)})`,
-                });
-                if (section.labelKey === 'panel.targetChecklist') this.checklistCountEl = countEl;
-                if (section.labelKey === 'panel.targetFile') this.fileCountEl = countEl;
-            }
-            tab.addEventListener('click', () => this.switchSection(index));
-            this.tabs.push(tab);
-
-            const sectionEl = this.sectionsEl.createDiv({ cls: 'task-detail-section' });
-            const sectionBody = sectionEl.createDiv({ cls: 'task-detail-section-body' });
-            if (section.labelKey === 'panel.weekGoalTab') this.renderWeekGoalSection(sectionBody);
-            if (section.labelKey === 'panel.targetChecklist') this.renderChecklist(sectionBody);
-            if (section.labelKey === 'panel.targetFile') this.renderFiles(sectionBody);
-        }
-
-        this.switchSection(this.currentSection);
         this.renderSettingPanel();
     }
 
@@ -549,193 +495,6 @@ export class TaskDetailPanel extends FloatingPanel {
         body.createDiv({ cls: 'task-detail-setting-placeholder', text: t('panel.formCheckPending') });
     }
 
-    /** 「一周目标」选项卡：顶部周切换 + 周一到周日 7 个方框（左侧星期标题，右侧日目标勾选列表） */
-    private renderWeekGoalSection(container: HTMLElement): void {
-        container.empty();
-        const wrap = container.createDiv({ cls: 'task-week-goal' });
-
-        // 第一行：周切换按钮（上一周 / 周数 / 下一周）
-        const nav = wrap.createDiv({ cls: 'task-week-goal-nav' });
-        const prevBtn = nav.createEl('button', {
-            cls: 'task-week-goal-nav-btn',
-            attr: { type: 'button', 'aria-label': t('panel.weekGoalPrevWeek') },
-        });
-        setIcon(prevBtn, 'chevron-left');
-        prevBtn.addEventListener('click', () => {
-            this.weekGoalWeekKey = shiftWeekKey(this.weekGoalWeekKey, -1);
-            this.renderWeekGoalSection(container);
-        });
-
-        const { week } = parseWeekKey(this.weekGoalWeekKey);
-        const label = nav.createDiv({ cls: 'task-week-goal-nav-label' });
-        label.createSpan({ cls: 'task-week-goal-nav-week', text: `W${String(week).padStart(2, '0')}` });
-        const mondayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, 1);
-        const sundayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, 7);
-        label.createSpan({
-            cls: 'task-week-goal-nav-range',
-            text: `${Number(mondayKey.slice(5, 7))}/${Number(mondayKey.slice(8, 10))} - ${Number(sundayKey.slice(5, 7))}/${Number(sundayKey.slice(8, 10))}`,
-        });
-        if (this.weekGoalWeekKey === getCurrentWeekKey()) label.addClass('is-current');
-
-        const nextBtn = nav.createEl('button', {
-            cls: 'task-week-goal-nav-btn',
-            attr: { type: 'button', 'aria-label': t('panel.weekGoalNextWeek') },
-        });
-        setIcon(nextBtn, 'chevron-right');
-        nextBtn.addEventListener('click', () => {
-            this.weekGoalWeekKey = shiftWeekKey(this.weekGoalWeekKey, 1);
-            this.renderWeekGoalSection(container);
-        });
-
-        // 周一到周日：每天一个方框
-        const list = wrap.createDiv({ cls: 'task-week-goal-list' });
-        const weekdayKeys: Parameters<typeof t>[0][] = [
-            'week.monday',
-            'week.tuesday',
-            'week.wednesday',
-            'week.thursday',
-            'week.friday',
-            'week.saturday',
-            'week.sunday',
-        ];
-        for (let day = 1; day <= 7; day += 1) {
-            const dayKey = makeDayKeyFromWeek(this.weekGoalWeekKey, day);
-            this.renderWeekGoalDay(list, dayKey, t(weekdayKeys[day - 1]));
-        }
-    }
-
-    /** 单日方框：左侧星期标题（右上角 + 按钮），右侧日目标勾选列表 */
-    private renderWeekGoalDay(parentEl: HTMLElement, dayKey: string, weekdayLabel: string): void {
-        const box = parentEl.createDiv({ cls: 'task-week-goal-day' });
-        if (dayKey === getCurrentDayKey()) box.addClass('is-today');
-
-        const head = box.createDiv({ cls: 'task-week-goal-day-head' });
-        head.createSpan({ cls: 'task-week-goal-day-name', text: weekdayLabel });
-        head.createSpan({
-            cls: 'task-week-goal-day-date',
-            text: `${Number(dayKey.slice(5, 7))}/${Number(dayKey.slice(8, 10))}`,
-        });
-
-        const body = box.createDiv({ cls: 'task-week-goal-day-body' });
-
-        // 顶部工具行：左侧文字「未排布到日计划」，右侧 + 按钮
-        const toolbar = body.createDiv({ cls: 'task-week-goal-day-toolbar' });
-        toolbar.createSpan({ cls: 'task-week-goal-day-toolbar-label', text: t('panel.weekGoalUnplanned') });
-        const addBtn = toolbar.createEl('button', {
-            cls: 'task-week-goal-day-add',
-            attr: { type: 'button', 'aria-label': t('common.add') },
-        });
-        setIcon(addBtn, 'plus');
-        addBtn.addEventListener('click', () => this.startAddDayGoal(body, dayKey));
-
-        // 分割线
-        body.createDiv({ cls: 'task-week-goal-day-divider' });
-
-        // 日目标列表
-        const list = body.createDiv({ cls: 'task-week-goal-day-list' });
-        const entries = this.task.dayGoals?.[dayKey] ?? [];
-        if (entries.length === 0) {
-            list.createDiv({ cls: 'task-week-goal-day-empty', text: t('panel.weekGoalEmpty') });
-        }
-        for (const entry of entries) {
-            const row = list.createDiv({ cls: 'task-week-goal-item' });
-            row.toggleClass('is-done', entry.done === true);
-            const checkbox = row.createEl('input', { cls: 'task-week-goal-item-check' });
-            checkbox.type = 'checkbox';
-            checkbox.checked = entry.done === true;
-            checkbox.addEventListener('change', () => {
-                void this.toggleDayGoal(dayKey, entry.id, checkbox.checked);
-            });
-            row.createSpan({ cls: 'task-week-goal-item-text', text: entry.text });
-            const delBtn = row.createEl('button', {
-                cls: 'task-week-goal-item-delete',
-                attr: { type: 'button', 'aria-label': t('common.delete') },
-            });
-            setIcon(delBtn, 'x');
-            delBtn.addEventListener('click', () => void this.removeDayGoal(dayKey, entry.id));
-        }
-    }
-
-    /** 在列表末尾插入一个输入行，回车 / 失焦提交，Esc 取消 */
-    private startAddDayGoal(body: HTMLElement, dayKey: string): void {
-        // 已有输入行时不重复创建，直接聚焦
-        const existing = body.querySelector<HTMLInputElement>('.task-week-goal-add-input');
-        if (existing) {
-            existing.focus();
-            return;
-        }
-        const list = body.querySelector<HTMLElement>('.task-week-goal-day-list');
-        if (!list) return;
-        list.querySelector('.task-week-goal-day-empty')?.remove();
-
-        const inputRow = list.createDiv({ cls: 'task-week-goal-add-row' });
-        const input = inputRow.createEl('input', {
-            cls: 'task-week-goal-add-input',
-            attr: { type: 'text', placeholder: t('panel.weekGoalAddPlaceholder') },
-        });
-        input.focus();
-
-        let finished = false;
-        const finish = (commit: boolean): void => {
-            if (finished) return;
-            finished = true;
-            const text = input.value.trim();
-            inputRow.remove();
-            if (commit && text) void this.addDayGoal(dayKey, text);
-            else this.refreshWeekGoalSection();
-        };
-        input.addEventListener('keydown', (evt) => {
-            if (evt.key === 'Enter') {
-                evt.preventDefault();
-                finish(true);
-            } else if (evt.key === 'Escape') {
-                evt.preventDefault();
-                finish(false);
-            }
-        });
-        input.addEventListener('blur', () => finish(true));
-    }
-
-    /** 新增日目标 */
-    private async addDayGoal(dayKey: string, text: string): Promise<void> {
-        const entry: TaskDayGoalEntry = {
-            id: `dgoal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            text,
-            createdAt: Date.now(),
-        };
-        this.task.dayGoals = { ...(this.task.dayGoals ?? {}) };
-        this.task.dayGoals[dayKey] = [...(this.task.dayGoals[dayKey] ?? []), entry];
-        await this.panelOptions.save();
-        this.refreshWeekGoalSection();
-    }
-
-    /** 切换日目标完成状态 */
-    private async toggleDayGoal(dayKey: string, entryId: string, done: boolean): Promise<void> {
-        const entry = this.task.dayGoals?.[dayKey]?.find((item) => item.id === entryId);
-        if (!entry) return;
-        if (done) entry.done = true;
-        else delete entry.done;
-        await this.panelOptions.save();
-        this.refreshWeekGoalSection();
-    }
-
-    /** 删除日目标 */
-    private async removeDayGoal(dayKey: string, entryId: string): Promise<void> {
-        const list = this.task.dayGoals?.[dayKey];
-        if (!list) return;
-        const next = list.filter((item) => item.id !== entryId);
-        if (next.length > 0) this.task.dayGoals![dayKey] = next;
-        else delete this.task.dayGoals![dayKey];
-        await this.panelOptions.save();
-        this.refreshWeekGoalSection();
-    }
-
-    /** 重绘「一周目标」选项卡（保持当前周） */
-    private refreshWeekGoalSection(): void {
-        const section = this.sectionsEl?.querySelectorAll('.task-detail-section')[1] as HTMLElement | null;
-        const body = section?.querySelector('.task-detail-section-body') as HTMLElement | null;
-        if (body) this.renderWeekGoalSection(body);
-    }
 
     /** 就地编辑：把元素内容换成输入框，回车 / 失焦提交，Esc 取消 */
     private startInlineEdit(
@@ -870,373 +629,6 @@ export class TaskDetailPanel extends FloatingPanel {
         this.categoryMenuEl = null;
     }
 
-    /** 各分区条目数量（清单为未完成数） */
-    private sectionCount(index: number): number {
-        const key = SECTIONS[index]?.labelKey;
-        if (key === 'panel.targetChecklist') {
-            return (this.task.checklist ?? []).filter((item) => !item.done).length;
-        }
-        if (key === 'panel.targetFile') return listTaskFiles(this.panelOptions.app, this.task.fileDir).length;
-        return 0;
-    }
-
-    /** 清单：顶部按钮组 + 输入行 + 可选中条目的卡片列表（已完成沉底） */
-    private renderChecklist(container: HTMLElement): void {
-        this.checklistBodyEl = container;
-        container.empty();
-        const wrap = container.createDiv({ cls: 'task-detail-basket task-detail-todo' });
-
-        // 顶部按钮组：排序方式 / 设置截止时间（需先选中条目）
-        const toolbar = wrap.createDiv({ cls: 'task-detail-todo-toolbar' });
-        const sortBtn = toolbar.createEl('button', {
-            cls: 'task-detail-todo-tool-btn',
-            text: this.checklistSort === 'due' ? t('panel.checklistSortDue') : t('panel.checklistSortCreated'),
-        });
-        sortBtn.onclick = () => {
-            this.checklistSort = this.checklistSort === 'due' ? 'created' : 'due';
-            this.renderChecklist(container);
-        };
-        const dueBtn = toolbar.createEl('button', {
-            cls: 'task-detail-todo-tool-btn',
-            text: t('panel.checklistSetDue'),
-        });
-        dueBtn.disabled = !this.selectedChecklistId;
-        dueBtn.onclick = () => this.openChecklistDueEditor(wrap, container);
-
-        const row = wrap.createDiv({ cls: 'gtd-collect-input-row' });
-        const input = row.createEl('input', { cls: 'gtd-collect-input' });
-        input.type = 'text';
-        input.placeholder = t('panel.checklistAddPlaceholder');
-        const addBtn = row.createEl('button', { cls: 'gtd-collect-add-btn', text: t('common.add') });
-
-        const submit = (): void => {
-            const text = input.value.trim();
-            if (!text) return;
-            const entry: ChecklistItem = {
-                id: `checklist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                text,
-                createdAt: Date.now(),
-            };
-            this.task.checklist = [...(this.task.checklist ?? []), entry];
-            this.syncChecklistToTasks();
-            input.value = '';
-            void this.panelOptions.save().then(() => this.renderChecklist(container));
-        };
-        addBtn.onclick = submit;
-        input.onkeydown = (evt) => {
-            if (evt.key === 'Enter') submit();
-        };
-
-        const listWrap = wrap.createDiv({ cls: 'gtd-collect-list task-detail-basket-list' });
-        const listInner = listWrap.createDiv({ cls: 'gtd-collect-list-inner' });
-        const entries = this.task.checklist ?? [];
-        this.checklistCountEl?.setText(`(${entries.filter((item) => !item.done).length})`);
-
-        if (entries.length === 0) {
-            listInner.createDiv({ cls: 'gtd-collect-empty', text: t('panel.checklistEmpty') });
-            return;
-        }
-
-        // 未完成在前、已完成沉底；未完成可按截止时间排序（无截止时间排最后）
-        const pending = entries.filter((entry) => !entry.done);
-        if (this.checklistSort === 'due') {
-            pending.sort((a, b) => {
-                const aDue = a.dueDate ? new Date(`${a.dueDate}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-                const bDue = b.dueDate ? new Date(`${b.dueDate}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-                if (aDue !== bDue) return aDue - bDue;
-                return a.createdAt - b.createdAt;
-            });
-        }
-        const ordered = [...pending, ...entries.filter((entry) => entry.done)];
-
-        for (const entry of ordered) {
-            const card = listInner.createDiv({ cls: 'gtd-collect-card task-detail-todo-card' });
-            card.toggleClass('is-done', entry.done === true);
-            card.toggleClass('is-selected', this.selectedChecklistId === entry.id);
-            // 点击条目切换选中态（供「设置截止时间」使用）
-            card.addEventListener('click', () => {
-                this.selectedChecklistId = this.selectedChecklistId === entry.id ? null : entry.id;
-                this.renderChecklist(container);
-            });
-
-            // 第一行：状态标签 + 截止日期相关标签（不再显示创建时间）
-            const meta = card.createDiv({ cls: 'gtd-collect-card-meta' });
-            meta.createSpan({
-                cls: 'gtd-collect-card-status',
-                text: t(entry.done ? 'panel.checklistDone' : 'panel.checklistPending'),
-            });
-            // 已完成条目显示完成时间
-            if (entry.done && entry.completedAt) {
-                meta.createSpan({
-                    cls: 'task-detail-todo-due-tag task-detail-todo-done-tag',
-                    text: t('panel.checklistCompletedAt', { time: formatCompletedTime(entry.completedAt) }),
-                });
-            }
-            if (entry.dueDate) this.appendChecklistDueTags(meta, entry.dueDate);
-
-            const main = card.createDiv({ cls: 'task-detail-todo-main' });
-            const checkbox = main.createEl('input', { cls: 'task-detail-todo-checkbox' });
-            checkbox.type = 'checkbox';
-            checkbox.checked = entry.done === true;
-            checkbox.addEventListener('click', (evt) => evt.stopPropagation());
-            checkbox.addEventListener('change', () => {
-                entry.done = checkbox.checked;
-                // 完成时记录时间戳，取消完成时清除
-                if (checkbox.checked) entry.completedAt = Date.now();
-                else delete entry.completedAt;
-                this.syncChecklistToTasks();
-                void this.panelOptions.save().then(() => this.renderChecklist(container));
-            });
-            main.createSpan({ cls: 'gtd-collect-card-content task-detail-todo-text', text: entry.text });
-
-            const delBtn = card.createEl('button', { cls: 'gtd-collect-card-delete', text: '×' });
-            delBtn.onclick = (evt) => {
-                evt.stopPropagation();
-                this.task.checklist = (this.task.checklist ?? []).filter((item) => item.id !== entry.id);
-                if (this.selectedChecklistId === entry.id) this.selectedChecklistId = null;
-                this.syncChecklistToTasks();
-                void this.panelOptions.save().then(() => this.renderChecklist(container));
-            };
-        }
-    }
-
-    /** 在状态标签后追加截止日期 / 剩余天数 / 已过期标签 */
-    private appendChecklistDueTags(meta: HTMLElement, dueDate: string): void {
-        const due = new Date(`${dueDate}T00:00:00`);
-        if (Number.isNaN(due.getTime())) return;
-        const label = getLang() === 'zh'
-            ? `${due.getMonth() + 1}月${due.getDate()}日`
-            : `${due.getMonth() + 1}/${due.getDate()}`;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const days = Math.round((due.getTime() - today.getTime()) / 86400000);
-        // 「几天后 / 已过期」标签在截止日期标签之前
-        if (days < 0) {
-            meta.createSpan({ cls: 'task-detail-todo-due-tag is-overdue', text: t('panel.checklistOverdue') });
-        } else {
-            meta.createSpan({
-                cls: 'task-detail-todo-due-tag',
-                text: days === 0 ? t('panel.checklistDueToday') : t('panel.checklistDueInDays', { days }),
-            });
-        }
-        meta.createSpan({ cls: 'task-detail-todo-due-tag', text: t('panel.checklistDueDateTag', { date: label }) });
-    }
-
-    /** 选中条目的截止日期编辑行：日期输入框 + 确定 / 清除 / 取消 */
-    private openChecklistDueEditor(wrap: HTMLElement, container: HTMLElement): void {
-        const entry = (this.task.checklist ?? []).find((item) => item.id === this.selectedChecklistId);
-        if (!entry) return;
-        wrap.querySelector('.task-detail-todo-due-editor')?.remove();
-        const editor = wrap.createDiv({ cls: 'task-detail-todo-due-editor' });
-        const input = editor.createEl('input', { cls: 'task-detail-todo-due-input' });
-        input.type = 'date';
-        input.value = entry.dueDate ?? '';
-        const saveEntry = (): void => {
-            if (input.value) entry.dueDate = input.value;
-            else delete entry.dueDate;
-            this.syncChecklistToTasks();
-            void this.panelOptions.save().then(() => this.renderChecklist(container));
-        };
-        const save = editor.createEl('button', { cls: 'task-detail-todo-tool-btn', text: t('panel.checklistDueSave') });
-        save.onclick = saveEntry;
-        const clear = editor.createEl('button', { cls: 'task-detail-todo-tool-btn', text: t('panel.checklistDueClear') });
-        clear.onclick = () => {
-            input.value = '';
-            saveEntry();
-        };
-        const cancel = editor.createEl('button', { cls: 'task-detail-todo-tool-btn', text: t('panel.checklistDueCancel') });
-        cancel.onclick = () => editor.remove();
-        wrap.insertBefore(editor, wrap.querySelector('.gtd-collect-input-row'));
-        input.focus();
-    }
-
-    /** 同步清单到全量任务列表中的同一任务 */
-    private syncChecklistToTasks(): void {
-        const target = this.tasks.find((item) => item.id === this.task.id);
-        if (target) target.checklist = this.task.checklist;
-    }
-
-    /** 任务文件：先按任务树确保目录存在，再渲染操作卡片（时间戳开关 / 文件夹 / 添加）+ 文件列表卡片 */
-    private renderFiles(container: HTMLElement): void {
-        this.filesBodyEl = container;
-        void this.ensureFilesDir().then(() => {
-            // 异步期间可能已切换任务 / 重绘，仅渲染当前容器
-            if (this.filesBodyEl === container && container.isConnected) {
-                this.renderFilesContent(container);
-            }
-        });
-    }
-
-    /** 按项目库根目录 + 任务树确保任务文件目录（未配置项目库时返回 null） */
-    private async ensureFilesDir(): Promise<string | null> {
-        const root = this.panelOptions.getTaskLibraryRoot?.() ?? '';
-        if (!root) return null;
-        const result = await ensureTaskFileDir(this.panelOptions.app, root, this.tasks, this.task);
-        if (result.changed) {
-            this.syncFilesToTasks();
-            void this.panelOptions.save();
-        }
-        return result.dir;
-    }
-
-    /** 渲染任务文件内容 */
-    private renderFilesContent(container: HTMLElement): void {
-        container.empty();
-        const wrap = container.createDiv({ cls: 'task-detail-files' });
-
-        // 卡片一：操作按钮组
-        const card = wrap.createDiv({ cls: 'task-detail-files-card' });
-        const toolbar = card.createDiv({ cls: 'task-detail-files-toolbar' });
-
-        // 启用时间戳勾选框
-        const switchWrap = toolbar.createDiv({ cls: 'task-detail-files-switch' });
-        const checkbox = switchWrap.createEl('input', { cls: 'task-detail-files-checkbox' });
-        checkbox.type = 'checkbox';
-        checkbox.checked = this.task.fileTimestamp === true;
-        checkbox.addEventListener('change', () => {
-            this.task.fileTimestamp = checkbox.checked;
-            this.syncFilesToTasks();
-            void this.panelOptions.save();
-        });
-        switchWrap.createSpan({ cls: 'task-detail-files-switch-label', text: t('panel.fileTimestamp') });
-
-        // 文件夹：目录由任务树自动绑定，点击在 Obsidian 文件浏览器中定位
-        const dirBtn = toolbar.createEl('button', { cls: 'task-detail-files-btn' });
-        setIcon(dirBtn.createSpan({ cls: 'task-detail-files-btn-icon' }), 'folder');
-        dirBtn.createSpan({ cls: 'task-detail-files-btn-text', text: t('panel.fileFolder') });
-        if (this.task.fileDir) dirBtn.title = this.task.fileDir;
-        dirBtn.addEventListener('click', () => void this.openTaskFolder());
-
-        // 新建文件
-        const addBtn = toolbar.createEl('button', { cls: 'task-detail-files-btn' });
-        setIcon(addBtn.createSpan({ cls: 'task-detail-files-btn-icon' }), 'plus');
-        addBtn.createSpan({ cls: 'task-detail-files-btn-text', text: t('panel.fileAdd') });
-        addBtn.addEventListener('click', () => {
-            if (!this.task.fileDir) {
-                new Notice(t('panel.taskLibraryRequired'));
-                return;
-            }
-            this.fileCreateMode = true;
-            this.renderFilesContent(container);
-        });
-
-        if (this.fileCreateMode) {
-            const createRow = card.createDiv({ cls: 'task-detail-files-create' });
-            const nameInput = createRow.createEl('input', { cls: 'task-detail-files-create-input' });
-            nameInput.type = 'text';
-            nameInput.placeholder = t('panel.fileCreatePlaceholder');
-            const confirmBtn = createRow.createEl('button', { text: t('panel.fileCreate') });
-            const cancelBtn = createRow.createEl('button', { text: t('common.cancel') });
-            const submit = (): void => {
-                const name = nameInput.value.trim();
-                if (!name) return;
-                void this.createTaskFile(name);
-            };
-            confirmBtn.addEventListener('click', submit);
-            nameInput.addEventListener('keydown', (evt) => {
-                if (evt.key === 'Enter') submit();
-                if (evt.key === 'Escape') {
-                    this.fileCreateMode = false;
-                    this.renderFilesContent(container);
-                }
-            });
-            cancelBtn.addEventListener('click', () => {
-                this.fileCreateMode = false;
-                this.renderFilesContent(container);
-            });
-            nameInput.focus();
-        }
-
-        // 卡片二：文件列表（文件名 + 最近编辑时间，点击打开）
-        const listCard = wrap.createDiv({ cls: 'task-detail-files-card task-detail-files-list-card' });
-        const files = listTaskFiles(this.panelOptions.app, this.task.fileDir);
-        this.fileCountEl?.setText(`(${files.length})`);
-
-        if (!this.task.fileDir) {
-            listCard.createDiv({ cls: 'gtd-collect-empty', text: t('panel.taskLibraryRequired') });
-            return;
-        }
-        if (files.length === 0) {
-            listCard.createDiv({ cls: 'gtd-collect-empty', text: t('panel.fileEmpty') });
-            return;
-        }
-        for (const file of files) {
-            const row = listCard.createDiv({ cls: 'task-detail-file-row' });
-            setIcon(row.createSpan({ cls: 'task-detail-file-icon' }), 'file-text');
-            // 显示相对绑定目录的路径（含子目录），仅文件名不足以区分同名文件
-            const nameEl = row.createSpan({ cls: 'task-detail-file-name', text: relativeToDir(file.path, this.task.fileDir) });
-            nameEl.title = file.path;
-            row.createSpan({ cls: 'task-detail-file-time', text: formatDateTime(file.stat.mtime) });
-            row.addEventListener('click', () => this.openTaskFile(file));
-        }
-    }
-
-    /** 打开任务文件：Markdown 使用内置编辑面板，其它类型交给 Obsidian 默认打开方式 */
-    private openTaskFile(file: TFile): void {
-        if (file.extension !== 'md') {
-            void this.panelOptions.app.workspace.getLeaf(false).openFile(file);
-            return;
-        }
-        this.fileEditorPanel?.destroy();
-        this.fileEditorPanel = new FileEditorPanel({
-            app: this.panelOptions.app,
-            file,
-            container: this.panelOptions.container,
-            onClose: () => {
-                if (this.filesBodyEl?.isConnected) this.renderFiles(this.filesBodyEl);
-            },
-        });
-        this.fileEditorPanel.open();
-    }
-
-    /** 点击「文件夹」：未配置项目库时提示；已配置时确保目录存在并在 Obsidian 文件浏览器中定位 */
-    private async openTaskFolder(): Promise<void> {
-        const root = this.panelOptions.getTaskLibraryRoot?.() ?? '';
-        if (!root) {
-            new Notice(t('panel.taskLibraryRequired'));
-            return;
-        }
-        const dir = await this.ensureFilesDir();
-        if (!dir) return;
-        const folder = this.panelOptions.app.vault.getAbstractFileByPath(dir);
-        if (folder instanceof TFolder) revealFolderInExplorer(this.panelOptions.app, folder);
-        if (this.filesBodyEl?.isConnected) this.renderFilesContent(this.filesBodyEl);
-    }
-
-    /** 在自动绑定的任务文件目录下新建 Markdown 文件（启用时间戳时加前缀），并打开内置编辑面板 */
-    private async createTaskFile(name: string): Promise<void> {
-        const dir = await this.ensureFilesDir();
-        if (!dir) {
-            new Notice(t('panel.taskLibraryRequired'));
-            return;
-        }
-        const fileName = buildTaskFileName(name, this.task.fileTimestamp === true);
-        if (!fileName) return;
-        try {
-            const file = await this.panelOptions.app.vault.create(`${dir}/${fileName}`, '');
-            this.fileCreateMode = false;
-            if (this.filesBodyEl) this.renderFilesContent(this.filesBodyEl);
-            this.openTaskFile(file);
-        } catch {
-            new Notice(t('panel.fileCreateFailed'));
-        }
-    }
-
-    /** 同步任务文件配置到全量任务列表中的同一任务 */
-    private syncFilesToTasks(): void {
-        const target = this.tasks.find((item) => item.id === this.task.id);
-        if (!target) return;
-        target.fileDir = this.task.fileDir;
-        target.fileTimestamp = this.task.fileTimestamp;
-    }
-
-    /** 切换选项卡：只显示对应分区 */
-    private switchSection(index: number): void {
-        this.currentSection = index;
-        const sections = Array.from(this.sectionsEl.children) as HTMLElement[];
-        this.tabs.forEach((tab, i) => tab.toggleClass('is-active', i === index));
-        sections.forEach((section, i) => section.toggleClass('is-active', i === index));
-    }
 
     /** 渲染后代任务树 */
     private renderTree(): void {
@@ -1261,7 +653,7 @@ export class TaskDetailPanel extends FloatingPanel {
             setIcon(iconEl, 'git-branch');
             row.createSpan({ cls: 'task-detail-tree-label', text: child.name });
             // 条目末尾始终显示目标图标 + 该任务自身目标数量（为 0 不显示）
-            const goalCount = child.goals?.length ?? 0;
+            const goalCount = getTaskGoals(child).length;
             if (goalCount > 0) {
                 const goalEl = row.createSpan({ cls: 'task-detail-tree-goal' });
                 const goalIconEl = goalEl.createSpan({ cls: 'task-detail-tree-goal-icon' });
@@ -1461,11 +853,10 @@ export class TaskDetailPanel extends FloatingPanel {
         });
         const next = this.tasks.find((item) => item.id === taskId);
         if (next && next.id !== this.task.id) {
-            // 右侧整体切换为选中任务：名称 / 分类 / 描述 / 归属分区，未提交的内联编辑先行放弃
+            // 右侧整体切换为选中任务：名称 / 分类 / 描述 / 板块，未提交的内联编辑先行放弃
             this.activeInlineEditAbort?.();
             this.task = next;
-            this.selectedChecklistId = null;
-            this.fileCreateMode = false;
+            this.sectionHost.reset();
             this.renderRightPane();
             return;
         }
@@ -1483,8 +874,7 @@ export class TaskDetailPanel extends FloatingPanel {
             // 右侧切回根任务，未提交的内联编辑先行放弃
             this.activeInlineEditAbort?.();
             this.task = rootTask;
-            this.selectedChecklistId = null;
-            this.fileCreateMode = false;
+            this.sectionHost.reset();
             this.renderRightPane();
             return;
         }
@@ -1519,16 +909,6 @@ export class TaskDetailPanel extends FloatingPanel {
     }
 }
 
-/** 时间戳格式化为 YYYY-MM-DD HH:MM */
-function formatDateTime(ts: number): string {
-    const d = new Date(ts);
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const da = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const mi = String(d.getMinutes()).padStart(2, '0');
-    return `${y}-${mo}-${da} ${h}:${mi}`;
-}
 
 /** 完成时间格式化为 MM-DD HH:MM（清单条目上展示） */
 function formatCompletedTime(ts: number): string {

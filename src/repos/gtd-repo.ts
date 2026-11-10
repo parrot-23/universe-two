@@ -2,6 +2,8 @@
 // 视图不再直接 push/filter 数据，改调本仓库方法；底层仍操作 base-repo 持有的同一 gtdData 引用。
 import type { GtdData, GtdItem, GtdSource, GtdSourceType } from '../datatypes/gtd';
 import type { ChecklistItem } from '../datatypes/domain';
+import type { PrototypeTask } from '../datatypes/prototype-task';
+import { appendChecklist } from '../shared/task-sections';
 import type { BaseRepo } from './base-repo';
 
 /**
@@ -68,10 +70,10 @@ export class GtdRepo {
     /**
      * 梳理：把收集条目内容放入目标任务的清单，并标记该条目为已处理。
      * @param itemId 收集条目 id
-     * @param task 目标任务（含 checklist 字段）
+     * @param task 目标任务
      * @returns 是否成功（条目或任务不存在时返回 false）
      */
-    clarify(itemId: string, task: { checklist?: ChecklistItem[] } | undefined): boolean {
+    clarify(itemId: string, task: PrototypeTask | undefined): boolean {
         const item = this.data.items.find((it) => it.id === itemId);
         if (!item || !task) return false;
 
@@ -80,7 +82,7 @@ export class GtdRepo {
             text: item.content,
             createdAt: Date.now(),
         };
-        task.checklist = [...(task.checklist ?? []), entry];
+        appendChecklist(task, entry);
 
         item.status = 'processed';
         return true;

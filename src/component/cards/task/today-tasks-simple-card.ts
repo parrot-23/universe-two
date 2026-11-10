@@ -15,6 +15,7 @@ import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
 import type { PrototypeTaskRepo } from '../../../repos/prototype-task-repo';
 import type { TaskExecutionRepo } from '../../../repos/task-execution-repo';
 import { getCurrentDayKey, getISOWeek, makeDayKey, makeWeekKey } from '../../../shared/plan-data';
+import { getDayGoalEntries, getTaskHabit } from '../../../shared/task-sections';
 
 /** 当天 0 点 */
 function startOfToday(): Date {
@@ -242,7 +243,7 @@ export class TodayTasksSimpleCard {
                 });
             }
             // 习惯时间点（HH:mm）放在条目末尾
-            const habitTime = task.habit?.time;
+            const habitTime = getTaskHabit(task)?.time;
             if (habitTime) {
                 row.createSpan({ cls: 'interface-today-tasks-item-time', text: habitTime });
             }
@@ -441,7 +442,7 @@ export class TodayTasksSimpleCard {
 
     /** 当天日目标：追加到条目末尾，换行后与任务名称左对齐并缩进显示（已完成置灰加删除线） */
     private appendDayGoals(row: HTMLElement, task: PrototypeTask, dayKey: string, plainRow = false): void {
-        for (const goal of task.dayGoals?.[dayKey] ?? []) {
+        for (const goal of getDayGoalEntries(task, dayKey)) {
             const line = row.createDiv({
                 cls: `interface-today-tasks-item-daygoal${plainRow ? ' is-plain' : ''}`,
             });
@@ -593,8 +594,11 @@ export class TodayTasksSimpleCard {
     private habitTasks(): PrototypeTask[] {
         const weekday = this.weekday();
         return this.prototypeTaskRepo.tasks
-            .filter((task) => task.habit?.enabled === true && task.habit.weekdays.includes(weekday))
-            .sort((a, b) => (a.habit?.time ?? '').localeCompare(b.habit?.time ?? ''));
+            .filter((task) => {
+                const habit = getTaskHabit(task);
+                return habit?.enabled === true && habit.weekdays.includes(weekday);
+            })
+            .sort((a, b) => (getTaskHabit(a)?.time ?? '').localeCompare(getTaskHabit(b)?.time ?? ''));
     }
 
     /** 当天任务：计划排布到所选日期的任务 */

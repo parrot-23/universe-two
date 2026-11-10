@@ -192,6 +192,7 @@ export const en: I18nMessages = {
     'panel.noDescription': 'No description',
     'panel.sideTaskBadge': 'Side Task',
     'panel.targetChecklist': 'Checklist',
+    'panel.sectionRemove': 'Remove section',
     'panel.targetFormCheck': 'Form Check-in',
     'panel.targetOkr': 'OKR Basket',
     'panel.checklistAddPlaceholder': 'Enter a checklist item',

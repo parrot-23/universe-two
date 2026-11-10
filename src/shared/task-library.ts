@@ -1,9 +1,10 @@
 // 任务库目录工具：按任务树推导并创建任务目录（<项目库根目录>/<根任务>/<子任务…>/<任务文件>）。
-// 任务目录仅由本模块按规则计算，结果写入任务的 fileDir 字段（值为「任务文件」目录），不提供手动绑定。
+// 任务目录仅由本模块按规则计算，结果写入任务的「任务文件」板块（值为「任务文件」目录），不提供手动绑定。
 import { TFolder, type App } from 'obsidian';
 
 import type { PrototypeTask } from '../datatypes/prototype-task';
 import { t } from '../i18n';
+import { getTaskFileDir, setTaskFileDir } from './task-sections';
 
 /** 任务文件目录名（跟随界面语言） */
 export function getTaskFilesFolderName(): string {
@@ -67,8 +68,8 @@ function uniqueTaskDir(parentDir: string, task: PrototypeTask, root: string, tas
     const baseName = sanitizeFolderName(task.name);
     const claimed = new Set(
         tasks
-            .filter((item) => item.id !== task.id && item.fileDir && isUnderRoot(item.fileDir, root))
-            .map((item) => dirname(item.fileDir as string).toLowerCase()),
+            .filter((item) => item.id !== task.id && getTaskFileDir(item) && isUnderRoot(getTaskFileDir(item), root))
+            .map((item) => dirname(getTaskFileDir(item)).toLowerCase()),
     );
     let name = baseName;
     let index = 2;
@@ -83,14 +84,14 @@ function uniqueTaskDir(parentDir: string, task: PrototypeTask, root: string, tas
 export interface EnsureTaskDirResult {
     /** 任务文件目录；null 表示未配置项目库 */
     dir: string | null;
-    /** 是否有任务的 fileDir 被写入（调用方据此持久化） */
+    /** 是否有任务的「任务文件」板块被写入（调用方据此持久化） */
     changed: boolean;
 }
 
 /**
  * 确保当前任务的任务文件目录存在：
  * 目录按任务树推导（<项目库>/<根任务>/<子任务…>/<任务文件>），但只创建当前任务这一层，
- * 不会遍历上级任务、也不会给上级任务写入 fileDir 或创建其「任务文件」目录。
+ * 不会遍历上级任务、也不会给上级任务写入任务文件板块或创建其「任务文件」目录。
  * 已记录且位于项目库内的目录保持不变；不在项目库内（旧的手动绑定）会按规则重新绑定。
  */
 export async function ensureTaskFileDir(
@@ -117,25 +118,27 @@ export async function ensureTaskFileDir(
     for (const node of chain) {
         // 上级任务只取已记录的目录作为父级，不创建、不写入
         if (node.id !== task.id) {
-            const recorded = node.fileDir && isUnderRoot(node.fileDir, root) ? dirname(node.fileDir) : '';
+            const recordedDir = getTaskFileDir(node);
+            const recorded = recordedDir && isUnderRoot(recordedDir, root) ? dirname(recordedDir) : '';
             parentDir = recorded || `${parentDir}/${sanitizeFolderName(node.name)}`;
             continue;
         }
-        let taskDir = node.fileDir && isUnderRoot(node.fileDir, root) ? dirname(node.fileDir) : '';
+        const recordedDir = getTaskFileDir(node);
+        let taskDir = recordedDir && isUnderRoot(recordedDir, root) ? dirname(recordedDir) : '';
         if (!taskDir) {
             taskDir = uniqueTaskDir(parentDir, node, root, tasks);
-            node.fileDir = `${taskDir}/${getTaskFilesFolderName()}`;
+            setTaskFileDir(node, `${taskDir}/${getTaskFilesFolderName()}`);
             changed = true;
         }
         await ensureFolder(app, taskDir);
-        await ensureFolder(app, node.fileDir as string);
+        await ensureFolder(app, getTaskFileDir(node));
     }
 
-    return { dir: task.fileDir ?? null, changed };
+    return { dir: getTaskFileDir(task) || null, changed };
 }
 
 /**
- * 任务改名后同步重命名其目录（子任务目录随父目录一起移动），并更新相关任务的 fileDir。
+ * 任务改名后同步重命名其目录（子任务目录随父目录一起移动），并更新相关任务的任务文件板块。
  * 仅处理位于项目库内的目录；返回是否有改动（调用方据此持久化）。
  */
 export async function renameTaskDir(
@@ -144,8 +147,9 @@ export async function renameTaskDir(
     tasks: PrototypeTask[],
     task: PrototypeTask,
 ): Promise<boolean> {
-    if (!root || !task.fileDir || !isUnderRoot(task.fileDir, root)) return false;
-    const oldDir = dirname(task.fileDir);
+    const taskFileDir = getTaskFileDir(task);
+    if (!root || !taskFileDir || !isUnderRoot(taskFileDir, root)) return false;
+    const oldDir = dirname(taskFileDir);
     const parentDir = dirname(oldDir);
     if (!oldDir || !parentDir || !isUnderRoot(oldDir, root)) return false;
 
@@ -171,11 +175,12 @@ export async function renameTaskDir(
             return false;
         }
     }
-    // 任务自身与后代任务的 fileDir 统一改写前缀（「任务文件」子目录名保持不变）
+    // 任务自身与后代任务的任务文件目录统一改写前缀（「任务文件」子目录名保持不变）
     const prefix = `${oldDir}/`;
     for (const item of tasks) {
-        if (item.fileDir && item.fileDir.startsWith(prefix)) {
-            item.fileDir = `${targetDir}/${item.fileDir.slice(prefix.length)}`;
+        const dir = getTaskFileDir(item);
+        if (dir && dir.startsWith(prefix)) {
+            setTaskFileDir(item, `${targetDir}/${dir.slice(prefix.length)}`);
         }
     }
     return true;

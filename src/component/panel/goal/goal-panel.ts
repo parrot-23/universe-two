@@ -15,6 +15,7 @@ import {
     parseWeekKey,
     shiftWeekKey,
 } from '../../../shared/plan-data';
+import { getTaskGoals } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 任务目标面板配置 */
@@ -79,7 +80,7 @@ export class GoalPanel extends FloatingPanel {
     /** 渲染左右结构：左侧任务卡片列表 + 右侧泳道图（两侧行高一致，纵向同步滚动） */
     private render(): void {
         this.body.empty();
-        const tasks = this.panelOptions.getTasks().filter((task) => (task.goals ?? []).length > 0);
+        const tasks = this.panelOptions.getTasks().filter((task) => getTaskGoals(task).length > 0);
         const byId = new Map(this.panelOptions.getTasks().map((task) => [task.id, task]));
 
         const left = this.body.createDiv({ cls: 'goal-panel-left' });
@@ -120,7 +121,7 @@ export class GoalPanel extends FloatingPanel {
         head.createSpan({ cls: 'goal-panel-card-name', text: task.name });
         const count = head.createSpan({ cls: 'goal-panel-card-count' });
         setIcon(count.createSpan({ cls: 'goal-panel-card-count-icon' }), 'target');
-        count.createSpan({ cls: 'goal-panel-card-count-text', text: String((task.goals ?? []).length) });
+        count.createSpan({ cls: 'goal-panel-card-count-text', text: String(getTaskGoals(task).length) });
     }
 
     /** 任务的父层级路径（根任务 > 子任务 …，不含当前任务） */
@@ -196,7 +197,7 @@ export class GoalPanel extends FloatingPanel {
         byId: Map<string, PrototypeTask>,
     ): void {
         // 只保留有截止日期且落在显示范围内的目标，按截止周从左到右排列
-        const placed = (task.goals ?? [])
+        const placed = getTaskGoals(task)
             .map((goal) => ({ goal, index: this.goalColumnIndex(goal, weekKeys) }))
             .filter((item): item is { goal: TaskGoalEntry; index: number } => item.index >= 0)
             .sort((a, b) => a.index - b.index);
@@ -295,7 +296,7 @@ export class GoalPanel extends FloatingPanel {
 
     /** 任务组高度：至少与左侧卡片等高，目标多时按目标行数撑开 */
     private groupHeight(task: PrototypeTask): number {
-        const count = (task.goals ?? []).length;
+        const count = getTaskGoals(task).length;
         const content = count * GOAL_ROW_HEIGHT + Math.max(count - 1, 0) * GOAL_ROW_GAP;
         return Math.max(ROW_HEIGHT, content) + GROUP_GAP;
     }

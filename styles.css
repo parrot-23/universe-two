@@ -10621,7 +10621,7 @@ button.task-detail-todo-tool-btn:disabled {
     flex: 1;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 .task-detail-section {
@@ -14109,4 +14109,300 @@ button.interface-today-tasks-item-action,
 button.interface-today-tasks-add {
     background: transparent;
     color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+/* ======================== 任务板块宿主（任务详情 / 任务板块面板共用） ======================== */
+.task-section-host {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 单个板块 */
+.task-section-block {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 8px;
+    background: var(--sdt-card-bg, var(--background-secondary));
+    overflow: hidden;
+}
+
+.task-section-block-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.task-section-block-head:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.task-section-block-icon,
+.task-section-block-chevron {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.task-section-block-icon .svg-icon,
+.task-section-block-chevron .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.task-section-block-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-section-block-count {
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+}
+
+.task-section-block-spacer {
+    flex: 1;
+}
+
+.task-section-block-action {
+    display: inline-flex;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-section-block-action:hover {
+    color: var(--text-error);
+}
+
+.task-section-block-action .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.task-section-block-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 8px 8px;
+}
+
+/* 未创建板块：胶囊平铺 */
+.task-section-capsules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.task-section-capsule {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border: 1px dashed var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 999px;
+    background: transparent;
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-section-capsule:hover {
+    color: var(--sdt-text-primary, var(--text-normal));
+    border-color: var(--interactive-accent);
+}
+
+.task-section-capsule-icon {
+    display: inline-flex;
+}
+
+.task-section-capsule-icon .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* 板块内通用控件 */
+.task-section-toolbar {
+    display: flex;
+    gap: 6px;
+}
+
+.task-section-tool-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: transparent;
+    font-size: 11px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-section-tool-btn:hover:not(:disabled) {
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-section-tool-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.task-section-input-row,
+.task-section-due-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.task-section-input {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.task-section-add-btn {
+    flex: 0 0 auto;
+    font-size: 11px;
+}
+
+.task-section-empty {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.task-section-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.task-section-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 6px;
+}
+
+.task-section-item:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.task-section-item.is-selected {
+    box-shadow: inset 0 0 0 1px var(--interactive-accent);
+}
+
+.task-section-check {
+    flex: 0 0 auto;
+    margin: 2px 0 0;
+}
+
+.task-section-item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.task-section-item-text {
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+    word-break: break-word;
+}
+
+.task-section-item.is-done .task-section-item-text {
+    color: var(--text-faint);
+    text-decoration: line-through;
+}
+
+.task-section-item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.task-section-item-meta .is-overdue {
+    color: var(--text-error);
+}
+
+.task-section-item-delete {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+
+.task-section-item-delete:hover {
+    color: var(--text-error);
+}
+
+/* 本周描述 */
+.task-section-weeknote {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-section-weeknote-head {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.task-section-weeknote-textarea {
+    width: 100%;
+    min-height: 64px;
+    font-size: 12px;
+    resize: vertical;
+}
+
+/* 习惯 */
+.task-section-habit {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-section-habit-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-section-habit-weekdays {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.task-section-weekday {
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: transparent;
+    font-size: 10px;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-section-weekday.is-active {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
 }

@@ -4,7 +4,7 @@
 //       列表底部：选中任务时显示本周描述输入框，未选中时显示本周各分类计划时长柱形图。
 // 右侧：顶部周切换（上一周 / 周数 + 日期范围 / 下一周），
 //       下方为周一到周日 7 个方框，编辑选中任务在该周的日目标
-//       （数据与任务详情「一周目标」选项卡共享 task.dayGoals）。
+//       （数据与任务详情「一周目标」选项卡共享任务板块）。
 import { setIcon } from 'obsidian';
 
 import type { TaskStatus } from '../../../datatypes/domain';
@@ -20,6 +20,7 @@ import {
     parseWeekKey,
     shiftWeekKey,
 } from '../../../shared/plan-data';
+import { getDayGoalEntries, getWeekNote, setDayGoalEntries, setWeekNote } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 计划一周面板配置 */
@@ -421,7 +422,7 @@ export class PlanWeekPanel extends FloatingPanel {
 
     /** 选中任务在某一天已填写的日目标（星期 1=周一 … 7=周日） */
     private dayGoalEntries(task: PrototypeTask, weekday: number): TaskDayGoalEntry[] {
-        return task.dayGoals?.[makeDayKeyFromWeek(this.weekKey, weekday)] ?? [];
+        return getDayGoalEntries(task, makeDayKeyFromWeek(this.weekKey, weekday));
     }
 
     /** 悬浮预览：在该天卡片区域展示该天已填写的日目标 */
@@ -548,7 +549,7 @@ export class PlanWeekPanel extends FloatingPanel {
             if (text) void this.addDayGoal(task, dayKey, text).then(() => this.dayGoalEditorInputEl?.focus());
         });
         const list = editor.createDiv({ cls: 'plan-week-daygoal-editor-list' });
-        const entries = task.dayGoals?.[dayKey] ?? [];
+        const entries = getDayGoalEntries(task, dayKey);
         if (entries.length === 0) {
             list.createDiv({ cls: 'plan-week-daygoal-editor-empty', text: t('panel.weekGoalEmpty') });
         }
@@ -631,7 +632,7 @@ export class PlanWeekPanel extends FloatingPanel {
             attr: { placeholder: t('panel.planWeekDescriptionPlaceholder') },
         });
         this.migrateLegacyWeekNote(task);
-        this.descEl.value = task.weekGoals?.[this.weekKey] ?? '';
+        this.descEl.value = getWeekNote(task, this.weekKey);
         this.descEl.addEventListener('blur', () => this.saveDescription());
     }
 
@@ -686,17 +687,13 @@ export class PlanWeekPanel extends FloatingPanel {
         return `${Math.round(minutes)}m`;
     }
 
-    /** 保存本周目标到选中任务的 weekGoals（未选中任务或内容未变化时不写入） */
+    /** 保存本周描述到选中任务的本周描述板块（未选中任务或内容未变化时不写入） */
     private saveDescription(): void {
         const task = this.selectedTask();
         if (!task || !this.descEl) return;
         const next = this.descEl.value.trim();
-        if (next === (task.weekGoals?.[this.weekKey] ?? '')) return;
-        const goals = { ...(task.weekGoals ?? {}) };
-        if (next) goals[this.weekKey] = next;
-        else delete goals[this.weekKey];
-        if (Object.keys(goals).length > 0) task.weekGoals = goals;
-        else delete task.weekGoals;
+        if (next === getWeekNote(task, this.weekKey)) return;
+        setWeekNote(task, this.weekKey, next);
         void this.panelOptions.save();
         this.panelOptions.onChanged?.();
     }
@@ -709,23 +706,22 @@ export class PlanWeekPanel extends FloatingPanel {
         const repo = this.panelOptions.planAssignmentRepo;
         const legacy = repo.weekNote(this.weekKey);
         if (!legacy) return;
-        if (!task.weekGoals?.[this.weekKey]) {
-            task.weekGoals = { ...(task.weekGoals ?? {}), [this.weekKey]: legacy };
+        if (!getWeekNote(task, this.weekKey)) {
+            setWeekNote(task, this.weekKey, legacy);
         }
         repo.setWeekNote(this.weekKey, '');
         void this.panelOptions.save();
         this.panelOptions.onChanged?.();
     }
 
-    /** 新增日目标（写入选中任务的 dayGoals，与任务详情「一周目标」共享） */
+    /** 新增日目标（写入选中任务的日目标板块，与任务详情「一周目标」共享） */
     private async addDayGoal(task: PrototypeTask, dayKey: string, text: string): Promise<void> {
         const entry: TaskDayGoalEntry = {
             id: `dgoal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             text,
             createdAt: Date.now(),
         };
-        task.dayGoals = { ...(task.dayGoals ?? {}) };
-        task.dayGoals[dayKey] = [...(task.dayGoals[dayKey] ?? []), entry];
+        setDayGoalEntries(task, dayKey, [...getDayGoalEntries(task, dayKey), entry]);
         await this.panelOptions.save();
         this.panelOptions.onChanged?.();
         this.afterDayGoalChanged();
@@ -738,7 +734,7 @@ export class PlanWeekPanel extends FloatingPanel {
         entryId: string,
         done: boolean,
     ): Promise<void> {
-        const entry = task.dayGoals?.[dayKey]?.find((item) => item.id === entryId);
+        const entry = getDayGoalEntries(task, dayKey).find((item) => item.id === entryId);
         if (!entry) return;
         if (done) entry.done = true;
         else delete entry.done;
@@ -749,11 +745,9 @@ export class PlanWeekPanel extends FloatingPanel {
 
     /** 删除日目标 */
     private async removeDayGoal(task: PrototypeTask, dayKey: string, entryId: string): Promise<void> {
-        const list = task.dayGoals?.[dayKey];
-        if (!list) return;
-        const next = list.filter((item) => item.id !== entryId);
-        if (next.length > 0) task.dayGoals![dayKey] = next;
-        else delete task.dayGoals![dayKey];
+        const list = getDayGoalEntries(task, dayKey);
+        if (list.length === 0) return;
+        setDayGoalEntries(task, dayKey, list.filter((item) => item.id !== entryId));
         await this.panelOptions.save();
         this.panelOptions.onChanged?.();
         this.afterDayGoalChanged();

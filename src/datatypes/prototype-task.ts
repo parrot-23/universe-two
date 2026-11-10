@@ -1,7 +1,8 @@
 // 原型任务数据：界面视图「任务面板」中新建的主线 / 支线任务原型，独立持久化。
 // 与收集盒任务（InboxItem）无关，仅作为界面视图的原型数据。
 
-import type { ChecklistItem, TaskStatus } from './domain';
+import type { TaskStatus } from './domain';
+import type { TaskSection } from './task-section';
 
 /** 原型任务类型：主线 / 支线 */
 export type PrototypeTaskType = 'main' | 'side';
@@ -61,20 +62,8 @@ export interface PrototypeTask {
     categoryId?: string;
     /** 任务状态（可选，旧任务无此字段，默认未开始） */
     status?: TaskStatus;
-    /** 清单条目（任务详情「清单」选项卡，可勾选完成） */
-    checklist?: ChecklistItem[];
-    /** 任务文件目录（由项目库根目录 + 任务树自动推导，值为「任务文件」目录；空表示尚未生成） */
-    fileDir?: string;
-    /** 任务文件新建时是否在文件名前加时间戳 */
-    fileTimestamp?: boolean;
-    /** 习惯设置（可选，未设置时视为未启用） */
-    habit?: TaskHabit;
-    /** 目标清单条目（任务详情「目标」面板，可选） */
-    goals?: TaskGoalEntry[];
-    /** 日目标（任务详情「一周目标」选项卡，键为日期 YYYY-MM-DD） */
-    dayGoals?: Record<string, TaskDayGoalEntry[]>;
-    /** 本周目标（计划一周面板「本周描述」方框，键为周键，如 2026-W45） */
-    weekGoals?: Record<string, string>;
+    /** 任务板块（清单 / 日目标 / 本周描述 / 目标 / 文件 / 习惯），数组顺序即展示顺序 */
+    sections?: TaskSection[];
     /** 是否已归档（归档任务在界面中隐藏，数据仍保留） */
     archived?: boolean;
     /** 创建时间戳 */

@@ -8,6 +8,7 @@ import { t } from '../../../i18n';
 import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
 import type { PlanCategory } from '../../../shared/plan-category-manager';
 import { getCurrentDayKey, getCurrentWeekKey, getISOWeek, makeDayKeyFromWeek, makeWeekKey } from '../../../shared/plan-data';
+import { getDayGoalEntries } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 周历面板配置 */
@@ -222,7 +223,7 @@ export class WeekCalendarPanel extends FloatingPanel {
             dot.style.background = categories.find((category) => category.id === task.categoryId)?.color
                 ?? '#888888';
             head.createSpan({ cls: 'week-calendar-task-name', text: task.name });
-            for (const goal of task.dayGoals?.[dayKey] ?? []) {
+            for (const goal of getDayGoalEntries(task, dayKey)) {
                 const row = item.createDiv({ cls: 'week-calendar-task-goal week-calendar-day-goal' });
                 if (goal.done) row.addClass('is-done');
                 setIcon(

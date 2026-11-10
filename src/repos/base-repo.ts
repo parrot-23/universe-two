@@ -7,7 +7,7 @@ import type { PlanSchemeData } from '../shared/plan-data';
 import { ensureDefaultScheme } from '../shared/plan-data';
 import type { PlanCategoryData } from '../shared/plan-category-manager';
 import { ensureUncategorizedCategory, UNCATEGORIZED_CATEGORY_ID } from '../shared/plan-category-manager';
-import type { ChecklistItem, DayTemplateData, EventBlock, ExecutionRecord, InboxData, RunningTask, OkrRecordEntry } from '../datatypes/domain';
+import type { DayTemplateData, EventBlock, ExecutionRecord, InboxData, RunningTask, OkrRecordEntry } from '../datatypes/domain';
 import { DEFAULT_INBOX_DATA, migrateOkrConditions, migrateOkrEntries, migrateOkrRecordCards } from '../datatypes/domain';
 import type { WorkbenchData } from '../datatypes/card';
 import { defaultWorkbenchData } from '../datatypes/card';
@@ -15,11 +15,12 @@ import type { GtdData } from '../datatypes/gtd';
 import { defaultGtdData } from '../datatypes/gtd';
 import type { PlanAssignmentData } from '../datatypes/plan-assignment';
 import type { InterfaceLayoutData } from '../datatypes/interface-layout';
-import type { PrototypeTask, TaskDayGoalEntry, TaskGoalEntry, TaskHabit } from '../datatypes/prototype-task';
+import type { PrototypeTask } from '../datatypes/prototype-task';
 import type { TaskExecutionData } from '../datatypes/task-execution';
 import type { TimeBoxData } from '../datatypes/timebox-data';
 import type { ThemeData, Theme } from '../datatypes/theme';
 import { DEFAULT_THEME_ID } from '../datatypes/theme';
+import { createSectionsFromLegacy, parseTaskSections } from '../shared/task-sections';
 import { t } from '../i18n';
 
 /** 缓存目录默认名称 */
@@ -53,6 +54,8 @@ export interface PluginData {
     themeData: ThemeData;
     /** 原型任务描述 / 分类转换版本（1 = 已从旧任务转换） */
     prototypeTaskMetaMigrationDone?: number;
+    /** 原型任务板块结构版本（0 = 旧字段结构，1 = task.sections 结构） */
+    taskSectionSchemaVersion?: number;
     /** OKR 记录卡片的填写结果（顶层独立存储，不挂在任务上，避免任务对象膨胀） */
     recordEntries: OkrRecordEntry[];
     /** 当前进行中的任务（界面视图「今天任务」计时，随主数据一起持久化） */
@@ -114,6 +117,7 @@ export class BaseRepo {
             taskExecutionData: d.taskExecutionData,
             themeData: d.themeData,
             prototypeTaskMetaMigrationDone: d.prototypeTaskMetaMigrationDone,
+            taskSectionSchemaVersion: d.taskSectionSchemaVersion,
             recordEntries: d.recordEntries,
             runningTask: d.runningTask,
             cacheDirName: this.cacheDirName,
@@ -261,8 +265,12 @@ export class BaseRepo {
         // 兼容旧数据：确保 items / sources 字段存在
         if (!Array.isArray(initialGtdData.items)) initialGtdData.items = [];
         if (!Array.isArray(initialGtdData.sources)) initialGtdData.sources = [];
-        // 原型任务（兼容旧数据：默认空数组）
-        const initialPrototypeTasks = parsePrototypeTasks(savedData.prototypeTasks);
+        // 原型任务板块结构版本（兼容旧数据：0 = 旧字段结构，需要一次性迁移）
+        const savedTaskSectionSchemaVersion = typeof savedData.taskSectionSchemaVersion === 'number'
+            ? savedData.taskSectionSchemaVersion
+            : 0;
+        // 原型任务（旧字段一次性迁移为 task.sections；兼容旧数据：默认空数组）
+        const initialPrototypeTasks = parsePrototypeTasks(savedData.prototypeTasks, savedTaskSectionSchemaVersion < 1);
         // 时间盒数据（兼容旧数据：默认空）
         const initialTimeBoxData = parseTimeBoxData(savedData.timeBoxData);
         // 计划排布数据（兼容旧数据：默认空）
@@ -316,12 +324,13 @@ export class BaseRepo {
             taskExecutionData: initialTaskExecutionData,
             themeData: initialThemeData,
             prototypeTaskMetaMigrationDone: prototypeTaskMetaMigrated ? 1 : initialPrototypeTaskMetaVersion,
+            taskSectionSchemaVersion: savedTaskSectionSchemaVersion < 1 ? 1 : savedTaskSectionSchemaVersion,
             recordEntries: initialOkrEntries,
             runningTask: initialRunningTask,
         };
 
         // 转换后立即落盘，避免下次启动重复执行
-        if (prototypeTaskMetaMigrated) await this.saveAll();
+        if (prototypeTaskMetaMigrated || savedTaskSectionSchemaVersion < 1) await this.saveAll();
     }
 
     /** 清空全部插件数据并重置为默认值 */
@@ -331,7 +340,7 @@ export class BaseRepo {
 }
 
 /** 解析持久化的原型任务（兼容旧数据 / 非法数据：返回空数组） */
-function parsePrototypeTasks(raw: unknown): PrototypeTask[] {
+function parsePrototypeTasks(raw: unknown, migrateLegacy: boolean): PrototypeTask[] {
     if (!Array.isArray(raw)) return [];
     const tasks: PrototypeTask[] = [];
     for (const item of raw) {
@@ -339,6 +348,8 @@ function parsePrototypeTasks(raw: unknown): PrototypeTask[] {
         const r = item as Record<string, unknown>;
         if (typeof r.id !== 'string' || typeof r.name !== 'string') continue;
         const type = r.type === 'side' ? 'side' : 'main';
+        // 板块：优先读新结构；旧结构在迁移期由旧字段一次性转换
+        const sections = parseTaskSections(r.sections) ?? (migrateLegacy ? createSectionsFromLegacy(r) : undefined);
         tasks.push({
             id: r.id,
             name: r.name,
@@ -349,116 +360,12 @@ function parsePrototypeTasks(raw: unknown): PrototypeTask[] {
             ...(r.status === 'notStarted' || r.status === 'inProgress' || r.status === 'done' || r.status === 'paused'
                 ? { status: r.status }
                 : {}),
-            ...(parseTaskHabit(r.habit) ? { habit: parseTaskHabit(r.habit)! } : {}),
-            ...(parseTaskChecklist(r.checklist) ? { checklist: parseTaskChecklist(r.checklist)! } : {}),
-            ...(typeof r.fileDir === 'string' && r.fileDir ? { fileDir: r.fileDir } : {}),
-            ...(r.fileTimestamp === true ? { fileTimestamp: true } : {}),
-            ...(parseTaskGoals(r.goals) ? { goals: parseTaskGoals(r.goals)! } : {}),
-            ...(parseTaskDayGoals(r.dayGoals) ? { dayGoals: parseTaskDayGoals(r.dayGoals)! } : {}),
-            ...(parseTaskWeekGoals(r.weekGoals) ? { weekGoals: parseTaskWeekGoals(r.weekGoals)! } : {}),
+            ...(sections ? { sections } : {}),
             ...(r.archived === true ? { archived: true } : {}),
             createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
         });
     }
     return tasks;
-}
-
-/** 解析任务目标清单（无有效条目时返回 null） */
-function parseTaskGoals(raw: unknown): TaskGoalEntry[] | null {
-    if (!Array.isArray(raw)) return null;
-    const goals: TaskGoalEntry[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== 'object') continue;
-        const r = entry as Record<string, unknown>;
-        if (typeof r.id !== 'string' || typeof r.text !== 'string') continue;
-        const subtaskIds = parseGoalSubtaskIds(r);
-        goals.push({
-            id: r.id,
-            text: r.text,
-            createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
-            ...(typeof r.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dueDate) ? { dueDate: r.dueDate } : {}),
-            ...(subtaskIds.length > 0 ? { subtaskIds } : {}),
-            ...(r.done === true ? { done: true } : {}),
-            ...(typeof r.startWeek === 'string' && /^\d{4}-W\d{2}$/.test(r.startWeek) ? { startWeek: r.startWeek } : {}),
-            ...(typeof r.endWeek === 'string' && /^\d{4}-W\d{2}$/.test(r.endWeek) ? { endWeek: r.endWeek } : {}),
-        });
-    }
-    return goals.length > 0 ? goals : null;
-}
-
-/** 解析日目标（键为日期 YYYY-MM-DD；无有效条目时返回 null） */
-function parseTaskDayGoals(raw: unknown): Record<string, TaskDayGoalEntry[]> | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const result: Record<string, TaskDayGoalEntry[]> = {};
-    for (const [dayKey, value] of Object.entries(raw as Record<string, unknown>)) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !Array.isArray(value)) continue;
-        const entries: TaskDayGoalEntry[] = [];
-        for (const entry of value) {
-            if (!entry || typeof entry !== 'object') continue;
-            const r = entry as Record<string, unknown>;
-            if (typeof r.id !== 'string' || typeof r.text !== 'string') continue;
-            entries.push({
-                id: r.id,
-                text: r.text,
-                createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
-                ...(r.done === true ? { done: true } : {}),
-            });
-        }
-        if (entries.length > 0) result[dayKey] = entries;
-    }
-    return Object.keys(result).length > 0 ? result : null;
-}
-
-/** 解析本周目标（键为周键 YYYY-Www；无有效条目时返回 null） */
-function parseTaskWeekGoals(raw: unknown): Record<string, string> | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const result: Record<string, string> = {};
-    for (const [weekKey, value] of Object.entries(raw as Record<string, unknown>)) {
-        if (!/^\d{4}-W\d{2}$/.test(weekKey) || typeof value !== 'string') continue;
-        const trimmed = value.trim();
-        if (trimmed) result[weekKey] = trimmed;
-    }
-    return Object.keys(result).length > 0 ? result : null;
-}
-
-/** 解析目标绑定的子任务 id（兼容早期的单值 subtaskId 字段） */
-function parseGoalSubtaskIds(raw: Record<string, unknown>): string[] {
-    const ids = Array.isArray(raw.subtaskIds)
-        ? raw.subtaskIds
-        : typeof raw.subtaskId === 'string' ? [raw.subtaskId] : [];
-    return Array.from(new Set(ids.filter((id): id is string => typeof id === 'string' && !!id)));
-}
-
-/** 解析任务清单条目（无有效条目时返回 null） */
-function parseTaskChecklist(raw: unknown): ChecklistItem[] | null {
-    if (!Array.isArray(raw)) return null;
-    const items: ChecklistItem[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== 'object') continue;
-        const r = entry as Record<string, unknown>;
-        if (typeof r.id !== 'string' || typeof r.text !== 'string') continue;
-        items.push({
-            id: r.id,
-            text: r.text,
-            ...(r.done === true ? { done: true } : {}),
-            ...(typeof r.completedAt === 'number' ? { completedAt: r.completedAt } : {}),
-            createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
-            ...(typeof r.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dueDate) ? { dueDate: r.dueDate } : {}),
-        });
-    }
-    return items.length > 0 ? items : null;
-}
-
-/** 解析任务习惯设置（非法数据返回 null） */
-function parseTaskHabit(raw: unknown): TaskHabit | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const r = raw as Record<string, unknown>;
-    if (typeof r.enabled !== 'boolean') return null;
-    const time = typeof r.time === 'string' && /^\d{2}:\d{2}$/.test(r.time) ? r.time : '09:00';
-    const weekdays = Array.isArray(r.weekdays)
-        ? r.weekdays.filter((day): day is number => typeof day === 'number' && day >= 1 && day <= 7)
-        : [];
-    return { enabled: r.enabled, time, weekdays };
 }
 
 /** 解析持久化的时间盒数据（兼容旧数据 / 非法数据：返回空） */
