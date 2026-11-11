@@ -3,7 +3,7 @@
 
 import type { ChecklistItem } from '../datatypes/domain';
 import type { TaskDayGoalEntry, TaskGoalEntry, TaskHabit } from '../datatypes/prototype-task';
-import type { SectionType, TaskSectionPayloadMap } from '../datatypes/task-section';
+import type { SectionType, TaskSectionPayloadMap, TaskStageGoalEntry } from '../datatypes/task-section';
 
 /** 板块定义 */
 export interface SectionDefinition {
@@ -74,6 +74,29 @@ function parseWeekNotePayload(raw: unknown): TaskSectionPayloadMap['weekNote'] |
         if (trimmed) notes[weekKey] = trimmed;
     }
     return { notes };
+}
+
+/** 解析阶段目标（键为周键 YYYY-Www，该周为截止时间点） */
+function parseStageGoalsPayload(raw: unknown): TaskSectionPayloadMap['stageGoals'] | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const entries: Record<string, TaskStageGoalEntry[]> = {};
+    for (const [weekKey, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (!/^\d{4}-W\d{2}$/.test(weekKey) || !Array.isArray(value)) continue;
+        const list: TaskStageGoalEntry[] = [];
+        for (const entry of value) {
+            if (!entry || typeof entry !== 'object') continue;
+            const r = entry as Record<string, unknown>;
+            if (typeof r.id !== 'string' || typeof r.text !== 'string') continue;
+            list.push({
+                id: r.id,
+                text: r.text,
+                createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
+                ...(r.done === true ? { done: true } : {}),
+            });
+        }
+        if (list.length > 0) entries[weekKey] = list;
+    }
+    return { entries };
 }
 
 /** 解析目标清单 */
@@ -149,6 +172,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
         singleton: true,
         isEmpty: (payload) => !payload || Object.keys((payload as TaskSectionPayloadMap['weekNote']).notes).length === 0,
         parsePayload: (raw) => parseWeekNotePayload(raw),
+    },
+    stageGoals: {
+        type: 'stageGoals',
+        labelKey: 'panel.sectionStageGoals',
+        icon: 'calendar-check',
+        singleton: true,
+        isEmpty: (payload) => !payload || Object.keys((payload as TaskSectionPayloadMap['stageGoals']).entries).length === 0,
+        parsePayload: (raw) => parseStageGoalsPayload(raw),
     },
     goals: {
         type: 'goals',

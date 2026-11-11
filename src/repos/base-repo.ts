@@ -20,7 +20,7 @@ import type { TaskExecutionData } from '../datatypes/task-execution';
 import type { TimeBoxData } from '../datatypes/timebox-data';
 import type { ThemeData, Theme } from '../datatypes/theme';
 import { DEFAULT_THEME_ID } from '../datatypes/theme';
-import { createSectionsFromLegacy, parseTaskSections } from '../shared/task-sections';
+import { createSectionsFromLegacy, parseSectionDisplay, parseTaskSections } from '../shared/task-sections';
 import { t } from '../i18n';
 
 /** 缓存目录默认名称 */
@@ -350,6 +350,7 @@ function parsePrototypeTasks(raw: unknown, migrateLegacy: boolean): PrototypeTas
         const type = r.type === 'side' ? 'side' : 'main';
         // 板块：优先读新结构；旧结构在迁移期由旧字段一次性转换
         const sections = parseTaskSections(r.sections) ?? (migrateLegacy ? createSectionsFromLegacy(r) : undefined);
+        const sectionDisplay = parseSectionDisplay(r.sectionDisplay);
         tasks.push({
             id: r.id,
             name: r.name,
@@ -361,6 +362,7 @@ function parsePrototypeTasks(raw: unknown, migrateLegacy: boolean): PrototypeTas
                 ? { status: r.status }
                 : {}),
             ...(sections ? { sections } : {}),
+            ...(sectionDisplay ? { sectionDisplay } : {}),
             ...(r.archived === true ? { archived: true } : {}),
             createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
         });

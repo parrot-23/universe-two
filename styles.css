@@ -14429,3 +14429,390 @@ button.interface-today-tasks-add {
     border-color: var(--interactive-accent);
     color: var(--text-on-accent);
 }
+/* ======================== 板块选项卡 / 配置页 ======================== */
+/* 选项卡栏容器：选项卡横向滚动 + 右侧配置按钮 */
+.task-section-tabs-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.task-section-tabs-bar .task-section-tabs {
+    flex: 1 1 auto;
+    border-bottom: none;
+}
+
+.task-section-tab-label {
+    font-size: 12px;
+}
+
+/* 配置入口按钮（齿轮） */
+.task-section-tabs-config {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 4px;
+    margin-bottom: 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sdt-text-secondary, var(--text-muted));
+    cursor: pointer;
+}
+
+.task-section-tabs-config:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+    color: var(--sdt-text-primary, var(--text-normal));
+}
+
+.task-section-tabs-config.is-active {
+    color: var(--interactive-accent);
+}
+
+.task-section-tabs-config .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* 配置页：板块类型显示设置 */
+.task-section-config {
+    display: flex;
+    flex-direction: column;
+    padding: 2px;
+}
+
+.task-section-config-hint {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+
+.task-section-config-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 0;
+}
+
+.task-section-config-icon {
+    display: flex;
+    color: var(--text-muted);
+}
+
+.task-section-config-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.task-section-config-label {
+    flex: 1 1 auto;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.task-section-config-segment {
+    display: flex;
+    flex: 0 0 auto;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.task-section-config-segment-btn {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 8px;
+    font-size: 11px;
+    line-height: 18px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.task-section-config-segment-btn:hover {
+    background: var(--sdt-hover-bg, var(--background-modifier-hover));
+}
+
+.task-section-config-segment-btn.is-active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+/* 目标板块 */
+.task-section-goals {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-section-due-input {
+    font-size: 12px;
+}
+
+/* ======================== 目标面板（panel/section/goal-board-panel） ======================== */
+.floating-panel-body.goal-board-panel {
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
+    flex: 0 0 auto;
+    height: 60vh;
+    min-height: 300px;
+    max-height: calc(100vh - 150px);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* 左侧任务配置 */
+.goal-board-left {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding-right: 14px;
+    box-sizing: border-box;
+    border-right: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.goal-board-config {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 4px;
+}
+
+.goal-board-config-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.goal-board-root-select {
+    width: 100%;
+}
+
+.goal-board-config-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--sdt-card-border, var(--background-modifier-border));
+}
+
+.goal-board-config-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.goal-board-config-label {
+    flex: 1 1 auto;
+    font-size: 12px;
+}
+
+.goal-board-config-placeholder {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+/* 补回：清单区容器 / 习惯时间输入 / 任务详情右侧滚动 */
+.task-section-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-section-time-input {
+    font-size: 12px;
+}
+
+.task-detail-right {
+    overflow-y: auto;
+}
+/* ======================== 周目标：格子标识 / 悬浮面板 / 板块内容 ======================== */
+.plan-annual-bar-cell.is-clickable {
+    cursor: pointer;
+}
+
+.plan-annual-bar-cell.is-clickable:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.goal-board-weekgoals-mark {
+    position: absolute;
+    right: 2px;
+    bottom: 1px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 2px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #ffffff;
+    font-size: 9px;
+    line-height: 12px;
+    pointer-events: none;
+}
+
+.goal-board-weekgoals-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--interactive-accent);
+}
+
+.goal-board-panel {
+    position: relative;
+}
+
+.goal-board-goal-tip {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 6px;
+    background: var(--sdt-card-bg, var(--background-primary));
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.goal-board-goal-tip-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.goal-board-goal-tip-close,
+.goal-board-goal-tip-delete {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 2px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.goal-board-goal-tip-hint {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.goal-board-goal-tip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.goal-board-goal-tip-empty {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.goal-board-goal-tip-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.goal-board-goal-tip-item.is-done .goal-board-goal-tip-text {
+    text-decoration: line-through;
+    color: var(--text-faint);
+}
+
+.goal-board-goal-tip-text {
+    flex: 1 1 auto;
+    word-break: break-word;
+}
+
+.goal-board-goal-tip-input-row {
+    display: flex;
+}
+
+.goal-board-goal-tip-input {
+    width: 100%;
+    font-size: 12px;
+}
+
+/* 周格下方的目标时长区：一行标题 + 按周列对齐的子任务卡片 */
+.goal-board-duration {
+    margin-top: 26px;
+    padding-bottom: 12px;
+}
+
+.goal-board-duration-title {
+    padding: 0 4px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.goal-board-duration-columns {
+    display: flex;
+    align-items: flex-start;
+}
+
+.goal-board-duration-column {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 2px;
+}
+
+.goal-board-duration-card {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 2px 4px;
+    box-sizing: border-box;
+    border: 1px solid var(--sdt-card-border, var(--background-modifier-border));
+    border-radius: 4px;
+    background: var(--sdt-card-bg, var(--background-primary));
+    font-size: 10px;
+    line-height: 1.3;
+}
+
+.goal-board-duration-dot {
+    flex: 0 0 auto;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--goal-board-duration-color, #888888);
+}
+
+.goal-board-duration-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-section-weekgoals {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.task-section-weekgoals-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-section-weekgoals-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}

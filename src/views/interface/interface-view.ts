@@ -20,8 +20,9 @@ import { CollectPanel } from '../../component/panel/collect/collect-panel';
 import { DataPanel } from '../../component/panel/check/data-panel';
 import { GalleryPanel } from '../../component/panel/gallery/gallery-panel';
 import { GoalPanel } from '../../component/panel/goal/goal-panel';
-import { HabitPanel } from '../../component/panel/plan/habit-panel';
+import { HabitPanel } from '../../component/panel/section/habit-panel';
 import { PlanAnnualPanel } from '../../component/panel/plan/plan-annual-panel';
+import { GoalBoardPanel } from '../../component/panel/section/goal-board-panel';
 import { PlanWeekPanel } from '../../component/panel/plan/plan-week-panel';
 import { TaskSectionsPanel } from '../../component/panel/task/task-sections-panel';
 import { TaskDetailPanel } from '../../component/panel/task/task-detail-panel';
@@ -110,6 +111,8 @@ export class InterfaceView {
     private themeDispose: (() => void) | null = null;
     /** 习惯卡片对应的面板 */
     private habitPanel: HabitPanel | null = null;
+    /** 目标面板实例（懒创建） */
+    private goalBoardPanel: GoalBoardPanel | null = null;
     /** 计划年度卡片对应的面板 */
     private planAnnualPanel: PlanAnnualPanel | null = null;
     /** 计划一周卡片对应的面板 */
@@ -308,6 +311,24 @@ export class InterfaceView {
             });
         }
         return this.habitPanel;
+    }
+
+    /** 目标面板实例（懒创建） */
+    private ensureGoalBoardPanel(): GoalBoardPanel {
+        if (!this.goalBoardPanel) {
+            const holder = this.plugin as Plugin & {
+                planAssignmentRepo: ConstructorParameters<typeof GoalBoardPanel>[0]['planAssignmentRepo'];
+                saveAll: () => Promise<void>;
+            };
+            this.goalBoardPanel = new GoalBoardPanel({
+                container: this.panelContainer,
+                getTasks: () => this.prototypeTaskRepo.tasks,
+                getCategories: () => this.categoryData.categories,
+                planAssignmentRepo: holder.planAssignmentRepo,
+                save: () => holder.saveAll(),
+            });
+        }
+        return this.goalBoardPanel;
     }
 
     /** 点击计划年度卡片：打开计划年度面板 */
@@ -788,6 +809,8 @@ export class InterfaceView {
                 return task ? this.ensureTaskDetailPanel(task) : null;
             case 'habit':
                 return this.ensureHabitPanel();
+            case 'goalBoard':
+                return this.ensureGoalBoardPanel();
             case 'timeBox':
                 return this.ensureTimeBoxPanel();
             case 'planAnnual':

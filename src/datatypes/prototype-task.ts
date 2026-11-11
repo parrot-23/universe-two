@@ -2,7 +2,7 @@
 // 与收集盒任务（InboxItem）无关，仅作为界面视图的原型数据。
 
 import type { TaskStatus } from './domain';
-import type { TaskSection } from './task-section';
+import type { TaskSection, TaskSectionDisplayMap } from './task-section';
 
 /** 原型任务类型：主线 / 支线 */
 export type PrototypeTaskType = 'main' | 'side';
@@ -64,6 +64,8 @@ export interface PrototypeTask {
     status?: TaskStatus;
     /** 任务板块（清单 / 日目标 / 本周描述 / 目标 / 文件 / 习惯），数组顺序即展示顺序 */
     sections?: TaskSection[];
+    /** 板块显示设置（auto / on / off，未配置按 auto；仅影响展示，不删除数据） */
+    sectionDisplay?: TaskSectionDisplayMap;
     /** 是否已归档（归档任务在界面中隐藏，数据仍保留） */
     archived?: boolean;
     /** 创建时间戳 */

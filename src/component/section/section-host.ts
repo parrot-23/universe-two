@@ -1,14 +1,14 @@
 // 任务板块宿主：任务详情面板与任务板块面板共用。
 // 渲染规则：
-//  1. 已落库的板块以选项卡展示（按 task.sections 数组顺序，单行横向滚动）；
-//  2. 未创建的类型以胶囊平铺在底部，点击生成临时选项卡，不写入任何数据；
-//  3. 草稿首次写入非空内容才落库（由访问器 ensureSection 触发），切走空草稿即丢弃；
-//  4. 落库后即使清空内容也保留板块，只有「…」菜单中的「移除板块」才删除。
-import { Menu, Notice, TFolder, setIcon, type App, type TFile } from 'obsidian';
+//  1. 选项卡栏只展示内容板块（按「配置」里的显示设置过滤），右上角齿轮按钮打开配置页；
+//  2. 「开启」始终显示该类型选项卡，「自动」仅在板块存在内容时显示，「关闭」始终隐藏（数据保留）；
+//  3. 没有可显示的板块时，配置页作为兜底视图；
+//  4. 内容读写统一走 shared/task-sections 访问器，首次写入内容时自动创建板块。
+import { Notice, TFolder, setIcon, type App, type TFile } from 'obsidian';
 
 import type { ChecklistItem } from '../../datatypes/domain';
 import type { PrototypeTask } from '../../datatypes/prototype-task';
-import type { SectionType } from '../../datatypes/task-section';
+import type { SectionDisplayMode, SectionType } from '../../datatypes/task-section';
 import { getLang, getWeekDays, t } from '../../i18n';
 import { SECTION_REGISTRY } from '../../shared/section-registry';
 import {
@@ -23,14 +23,18 @@ import {
     appendChecklist,
     getChecklist,
     getDayGoalEntries,
+    getSection,
+    getSectionDisplay,
+    getStageGoalEntries,
     getTaskFileDir,
     getTaskFileTimestamp,
     getTaskGoals,
     getTaskHabit,
     hasSection,
-    removeSection,
     setChecklist,
     setDayGoalEntries,
+    setSectionDisplay,
+    setStageGoalEntries,
     setTaskFileTimestamp,
     setTaskGoals,
     setTaskHabit,
@@ -68,10 +72,10 @@ export class SectionHost {
     private readonly options: SectionHostOptions;
     /** 渲染容器（重绘时复用） */
     private hostEl: HTMLElement | null = null;
-    /** 当前选中的选项卡类型 */
+    /** 当前选中的内容板块选项卡 */
     private activeType: SectionType | null = null;
-    /** 草稿板块类型（临时选项卡，切走即丢弃） */
-    private draftType: SectionType | null = null;
+    /** 是否正在显示配置页（齿轮按钮） */
+    private showConfig = false;
     /** 日目标板块当前查看的周键 */
     private weekKey = getCurrentWeekKey();
     /** 清单排序方式 */
@@ -87,10 +91,10 @@ export class SectionHost {
         this.options = options;
     }
 
-    /** 切换任务时重置临时状态（草稿不跨任务保留） */
+    /** 切换任务时重置临时状态（首次渲染落在第一个可见板块） */
     reset(): void {
         this.activeType = null;
-        this.draftType = null;
+        this.showConfig = false;
         this.weekKey = getCurrentWeekKey();
         this.checklistSort = 'created';
         this.selectedChecklistId = null;
@@ -114,23 +118,17 @@ export class SectionHost {
         const task = this.options.getTask();
         if (!task) return;
 
-        // 草稿已落库或不在展示范围时取消草稿标记
-        if (this.draftType && (hasSection(task, this.draftType) || !this.availableTypes().includes(this.draftType))) {
-            this.draftType = null;
-        }
-        const types = this.tabTypes(task);
-        if (!this.activeType || !types.includes(this.activeType)) this.activeType = types[0] ?? null;
+        const types = this.visibleTypes(task);
+        // 当前选项卡因显示设置或内容变化被隐藏时回到默认视图
+        if (this.activeType && !types.includes(this.activeType)) this.activeType = null;
+        if (!this.showConfig && !this.activeType) this.activeType = types[0] ?? null;
+        // 没有可显示的板块时，配置页作为兜底视图
+        if (!this.activeType) this.showConfig = true;
 
-        // 未创建的板块胶囊：紧贴任务名称 / 描述下方
-        this.renderCapsules(host, task, types);
         this.renderTabs(host, task, types);
         const body = host.createDiv({ cls: 'task-section-tab-body' });
-        if (this.activeType) {
-            this.renderTabHead(body, task, this.activeType);
-            this.renderBody(body, task, this.activeType);
-        } else {
-            body.createDiv({ cls: 'task-section-empty task-section-empty-hint', text: t('panel.sectionEmpty') });
-        }
+        if (this.showConfig || !this.activeType) this.renderConfig(body, task);
+        else this.renderBody(body, task, this.activeType);
     }
 
     /** 本面板展示的板块类型 */
@@ -140,98 +138,105 @@ export class SectionHost {
         return allowed ? all.filter((type) => allowed.includes(type)) : all;
     }
 
-    /** 选项卡列表：已落库板块按数组顺序 + 末尾草稿 */
-    private tabTypes(task: PrototypeTask): SectionType[] {
+    /** 可见的板块类型：先按 task.sections 顺序，再补未创建但设为「开启」的类型 */
+    private visibleTypes(task: PrototypeTask): SectionType[] {
         const available = this.availableTypes();
-        const persisted = (task.sections ?? [])
-            .map((section) => section.type)
-            .filter((type) => available.includes(type));
-        const draft =
-            this.draftType && !hasSection(task, this.draftType) && available.includes(this.draftType)
-                ? [this.draftType]
-                : [];
-        return [...persisted, ...draft];
+        const ordered = [...(task.sections ?? []).map((section) => section.type), ...available];
+        const seen = new Set<SectionType>();
+        const types: SectionType[] = [];
+        for (const type of ordered) {
+            if (!available.includes(type) || seen.has(type)) continue;
+            seen.add(type);
+            if (this.isVisible(task, type)) types.push(type);
+        }
+        return types;
+    }
+
+    /** 是否显示该类型选项卡：开启始终显示，自动仅在存在内容时显示 */
+    private isVisible(task: PrototypeTask, type: SectionType): boolean {
+        const mode = getSectionDisplay(task, type);
+        if (mode === 'on') return true;
+        if (mode === 'off') return false;
+        const section = getSection(task, type);
+        return !!section && !SECTION_REGISTRY[type].isEmpty(section.payload);
     }
 
     /* ---------------- 选项卡 ---------------- */
 
-    /** 选项卡栏（单行横向滚动） */
+    /** 选项卡栏：内容板块（单行横向滚动）+ 右侧齿轮按钮打开配置页 */
     private renderTabs(parent: HTMLElement, task: PrototypeTask, types: SectionType[]): void {
-        const tabs = parent.createDiv({ cls: 'task-section-tabs' });
+        const bar = parent.createDiv({ cls: 'task-section-tabs-bar' });
+        const tabs = bar.createDiv({ cls: 'task-section-tabs' });
         for (const type of types) {
             const def = SECTION_REGISTRY[type];
             const tab = tabs.createEl('button', { cls: 'task-section-tab', attr: { type: 'button' } });
-            tab.toggleClass('is-active', this.activeType === type);
+            tab.toggleClass('is-active', !this.showConfig && this.activeType === type);
             setIcon(tab.createSpan({ cls: 'task-section-tab-icon' }), def.icon);
             tab.createSpan({ cls: 'task-section-tab-label', text: t(def.labelKey as LabelKey) });
             const count = this.sectionCountText(task, type);
             if (count) tab.createSpan({ cls: 'task-section-tab-count', text: count });
-            tab.addEventListener('click', () => this.activateTab(task, type));
+            tab.addEventListener('click', () => this.activateTab(type));
         }
+
+        // 齿轮：打开 / 关闭配置页
+        const configBtn = bar.createEl('button', {
+            cls: 'task-section-tabs-config',
+            attr: { type: 'button', 'aria-label': t('panel.sectionConfig') },
+        });
+        configBtn.title = t('panel.sectionConfig');
+        configBtn.toggleClass('is-active', this.showConfig);
+        setIcon(configBtn, 'settings-2');
+        configBtn.addEventListener('click', () => this.activateConfig());
     }
 
-    /** 切换选项卡：切走尚未写入的草稿时直接丢弃 */
-    private activateTab(task: PrototypeTask, type: SectionType): void {
-        if (this.activeType === type) return;
-        if (this.draftType && !hasSection(task, this.draftType)) this.draftType = null;
+    /** 切换内容板块选项卡 */
+    private activateTab(type: SectionType): void {
+        if (!this.showConfig && this.activeType === type) return;
+        this.showConfig = false;
         this.activeType = type;
         this.render();
     }
 
-    /** 内容区右上角的「…」菜单：移除当前板块（草稿只丢弃内存状态） */
-    private renderTabHead(body: HTMLElement, task: PrototypeTask, type: SectionType): void {
-        const head = body.createDiv({ cls: 'task-section-tab-head' });
-        const moreBtn = head.createEl('button', {
-            cls: 'task-section-more-btn',
-            attr: { type: 'button', 'aria-label': t('panel.sectionRemove') },
-        });
-        moreBtn.title = t('panel.sectionRemove');
-        setIcon(moreBtn, 'more-horizontal');
-        moreBtn.addEventListener('click', (evt) => {
-            const menu = new Menu();
-            menu.addItem((item) =>
-                item
-                    .setTitle(t('panel.sectionRemove'))
-                    .setIcon('trash-2')
-                    .onClick(() => void this.removeTab(task, type)),
-            );
-            menu.showAtMouseEvent(evt);
-        });
+    /** 打开配置页 */
+    private activateConfig(): void {
+        if (this.showConfig) return;
+        this.showConfig = true;
+        this.render();
     }
 
-    /** 移除板块：草稿只丢弃内存状态，已落库才删除数据并顺延到相邻选项卡 */
-    private async removeTab(task: PrototypeTask, type: SectionType): Promise<void> {
-        if (!hasSection(task, type)) {
-            this.draftType = null;
-            this.activeType = null;
-            this.render();
-            return;
-        }
-        const types = this.tabTypes(task);
-        const index = types.indexOf(type);
-        const remaining = types.filter((item) => item !== type);
-        removeSection(task, type);
-        this.activeType = remaining[index] ?? remaining[index - 1] ?? null;
-        await this.commit(task);
-    }
+    /* ---------------- 配置（显示设置） ---------------- */
 
-    /** 未创建的板块类型：胶囊平铺，点击生成临时选项卡 */
-    private renderCapsules(parent: HTMLElement, task: PrototypeTask, tabTypes: SectionType[]): void {
-        const types = this.availableTypes().filter((type) => !tabTypes.includes(type));
-        if (types.length === 0) return;
-        const row = parent.createDiv({ cls: 'task-section-capsules' });
-        for (const type of types) {
+    /** 配置页：每个板块类型一行，右侧为「自动 / 开启 / 关闭」三段按钮 */
+    private renderConfig(body: HTMLElement, task: PrototypeTask): void {
+        const wrap = body.createDiv({ cls: 'task-section-config' });
+        wrap.createDiv({ cls: 'task-section-config-hint', text: t('panel.sectionConfigHint') });
+
+        const modes: { value: SectionDisplayMode; labelKey: LabelKey }[] = [
+            { value: 'auto', labelKey: 'panel.sectionDisplayAuto' },
+            { value: 'on', labelKey: 'panel.sectionDisplayOn' },
+            { value: 'off', labelKey: 'panel.sectionDisplayOff' },
+        ];
+        for (const type of this.availableTypes()) {
             const def = SECTION_REGISTRY[type];
-            const capsule = row.createEl('button', { cls: 'task-section-capsule', attr: { type: 'button' } });
-            setIcon(capsule.createSpan({ cls: 'task-section-capsule-icon' }), def.icon);
-            capsule.createSpan({ cls: 'task-section-capsule-text', text: t(def.labelKey as LabelKey) });
-            capsule.addEventListener('click', () => {
-                // 先丢弃尚未写入的旧草稿
-                if (this.draftType && !hasSection(task, this.draftType)) this.draftType = null;
-                this.draftType = type;
-                this.activeType = type;
-                this.render();
-            });
+            const row = wrap.createDiv({ cls: 'task-section-config-row' });
+            setIcon(row.createSpan({ cls: 'task-section-config-icon' }), def.icon);
+            row.createSpan({ cls: 'task-section-config-label', text: t(def.labelKey as LabelKey) });
+
+            const segment = row.createDiv({ cls: 'task-section-config-segment' });
+            const current = getSectionDisplay(task, type);
+            for (const mode of modes) {
+                const btn = segment.createEl('button', {
+                    cls: 'task-section-config-segment-btn',
+                    text: t(mode.labelKey),
+                    attr: { type: 'button' },
+                });
+                btn.toggleClass('is-active', current === mode.value);
+                btn.addEventListener('click', () => {
+                    if (getSectionDisplay(task, type) === mode.value) return;
+                    setSectionDisplay(task, type, mode.value);
+                    void this.commit(task);
+                });
+            }
         }
     }
 
@@ -243,6 +248,14 @@ export class SectionHost {
         }
         if (type === 'files') {
             return `(${listTaskFiles(this.options.app, getTaskFileDir(task)).length})`;
+        }
+        if (type === 'stageGoals') {
+            const entries = getSection(task, 'stageGoals')?.payload.entries ?? {};
+            const pending = Object.values(entries).reduce(
+                (sum, list) => sum + list.filter((item) => !item.done).length,
+                0,
+            );
+            return pending > 0 ? `(${pending})` : '';
         }
         return '';
     }
@@ -258,6 +271,9 @@ export class SectionHost {
                 return;
             case 'weekNote':
                 this.renderWeekNote(body, task);
+                return;
+            case 'stageGoals':
+                this.renderStageGoals(body, task);
                 return;
             case 'goals':
                 this.renderGoals(body, task);
@@ -619,6 +635,63 @@ export class SectionHost {
             setWeekNote(task, weekKey, textarea.value);
             void this.commit(task);
         });
+    }
+
+    /* ---------------- 阶段目标 ---------------- */
+
+    /** 阶段目标：按截止周分组展示（编辑入口在「板块 → 目标」面板的周格悬浮面板） */
+    private renderStageGoals(body: HTMLElement, task: PrototypeTask): void {
+        const wrap = body.createDiv({ cls: 'task-section-weekgoals' });
+        const entries = getSection(task, 'stageGoals')?.payload.entries ?? {};
+        const weekKeys = Object.keys(entries).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+        if (weekKeys.length === 0) {
+            wrap.createDiv({ cls: 'task-section-empty', text: t('panel.sectionStageGoalsEmpty') });
+            return;
+        }
+        for (const weekKey of weekKeys) {
+            const group = wrap.createDiv({ cls: 'task-section-weekgoals-group' });
+            const matched = weekKey.match(/^(\d{4})-W(\d{2})$/);
+            group.createDiv({
+                cls: 'task-section-weekgoals-title',
+                text: matched ? `${matched[1]} 第${Number(matched[2])}周` : weekKey,
+            });
+            const list = group.createDiv({ cls: 'task-section-list' });
+            for (const goal of entries[weekKey]) {
+                const row = list.createDiv({ cls: 'task-section-item' });
+                row.toggleClass('is-done', goal.done === true);
+                const checkbox = row.createEl('input', { cls: 'task-section-check', attr: { type: 'checkbox' } });
+                checkbox.checked = goal.done === true;
+                checkbox.addEventListener('change', () => {
+                    const next = getStageGoalEntries(task, weekKey).map((item) =>
+                        item.id === goal.id ? { ...item, ...(checkbox.checked ? { done: true } : { done: undefined }) } : item,
+                    );
+                    // done: undefined 会在保存时被丢弃
+                    setStageGoalEntries(task, weekKey, next.map((item) => {
+                        if (item.done === undefined) {
+                            const { done: _done, ...rest } = item;
+                            return rest;
+                        }
+                        return item;
+                    }));
+                    void this.commit(task);
+                });
+                const main = row.createDiv({ cls: 'task-section-item-main' });
+                main.createSpan({ cls: 'task-section-item-text', text: goal.text });
+                const delBtn = row.createEl('button', {
+                    cls: 'task-section-item-delete',
+                    text: '×',
+                    attr: { type: 'button', 'aria-label': t('common.delete') },
+                });
+                delBtn.addEventListener('click', () => {
+                    setStageGoalEntries(
+                        task,
+                        weekKey,
+                        getStageGoalEntries(task, weekKey).filter((item) => item.id !== goal.id),
+                    );
+                    void this.commit(task);
+                });
+            }
+        }
     }
 
     /* ---------------- 目标 ---------------- */

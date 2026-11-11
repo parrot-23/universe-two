@@ -5,6 +5,14 @@
 import type { ChecklistItem } from './domain';
 import type { TaskDayGoalEntry, TaskGoalEntry, TaskHabit } from './prototype-task';
 
+/** 阶段目标条目：绑定在某个周上，该周即截止时间点（键为周键 YYYY-Www） */
+export interface TaskStageGoalEntry {
+    id: string;
+    text: string;
+    createdAt: number;
+    done?: boolean;
+}
+
 /** 各板块类型对应的载荷结构 */
 export interface TaskSectionPayloadMap {
     /** 清单 */
@@ -13,6 +21,8 @@ export interface TaskSectionPayloadMap {
     dayGoals: { entries: Record<string, TaskDayGoalEntry[]> };
     /** 本周描述（键为周键 YYYY-Www） */
     weekNote: { notes: Record<string, string> };
+    /** 阶段目标（键为周键 YYYY-Www，该周为截止时间点） */
+    stageGoals: { entries: Record<string, TaskStageGoalEntry[]> };
     /** 目标清单 */
     goals: { items: TaskGoalEntry[] };
     /** 任务文件 */
@@ -23,6 +33,15 @@ export interface TaskSectionPayloadMap {
 
 /** 板块类型 */
 export type SectionType = keyof TaskSectionPayloadMap;
+
+/**
+ * 板块显示设置（仅影响展示，不删除数据）：
+ *  auto 有内容才显示；on 始终显示；off 始终隐藏。
+ */
+export type SectionDisplayMode = 'auto' | 'on' | 'off';
+
+/** 任务的板块显示设置（未配置的类型按 auto 处理） */
+export type TaskSectionDisplayMap = Partial<Record<SectionType, SectionDisplayMode>>;
 
 /** 板块公共字段 */
 export interface TaskSectionCommon {
