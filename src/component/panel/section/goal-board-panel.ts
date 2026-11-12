@@ -1,6 +1,8 @@
 // 目标面板：左侧任务配置（底部根任务下拉 + 目标通用配置占位），
 // 右侧为年-周泳道图（按季度翻页，仅展示根任务一行，读取计划整周排布）；
 // 点击色块周格弹出悬浮面板，可填写 / 勾选 / 删除该周的阶段目标（以该周为截止时间点，存入任务的「阶段目标」板块）。
+import { setIcon } from 'obsidian';
+
 import type { PrototypeTask } from '../../../datatypes/prototype-task';
 import { t } from '../../../i18n';
 import type { PlanAssignmentRepo } from '../../../repos/plan-assignment-repo';
@@ -13,7 +15,7 @@ import {
     parseWeekKey,
     shiftWeekKey,
 } from '../../../shared/plan-data';
-import { appendStageGoal, getStageGoalEntries, getWeekNote, setStageGoalEntries } from '../../../shared/task-sections';
+import { appendStageGoal, getSection, getStageGoalEntries, getWeekNote, setStageGoalEntries } from '../../../shared/task-sections';
 import { FloatingPanel, type FloatingPanelOptions } from '../basic/floating-panel';
 
 /** 季度内的一周 */
@@ -51,6 +53,8 @@ export interface GoalBoardPanelOptions extends Omit<FloatingPanelOptions, 'title
 /** 目标面板 */
 export class GoalBoardPanel extends FloatingPanel {
     private rootSelectEl!: HTMLSelectElement;
+    /** 左侧阶段目标列表容器 */
+    private goalListEl!: HTMLElement;
     private navEl!: HTMLElement;
     private weekHeaderEl!: HTMLElement;
     private laneEl!: HTMLElement;
@@ -63,7 +67,9 @@ export class GoalBoardPanel extends FloatingPanel {
     private rootTaskId: string | undefined;
     /** 当前季度内的周列表 */
     private quarterWeeks: QuarterWeek[] = [];
-    /** 阶段目标悬浮面板（挂在面板 body 内） */
+    /** 当前季度内的周键 → 周格子（左侧列表点击定位用） */
+    private weekCellMap = new Map<string, HTMLElement>();
+    /** 周目标悬浮面板（挂在面板 body 内） */
     private goalTipEl: HTMLElement | null = null;
     /** 悬浮面板对应的周键 */
     private goalTipWeekKey: string | null = null;
@@ -121,6 +127,10 @@ export class GoalBoardPanel extends FloatingPanel {
         });
 
         config.createDiv({ cls: 'goal-board-config-divider' });
+        config.createDiv({ cls: 'goal-board-config-title', text: t('panel.sectionStageGoals') });
+        this.goalListEl = config.createDiv({ cls: 'goal-board-goal-list' });
+
+        config.createDiv({ cls: 'goal-board-config-divider' });
         config.createDiv({ cls: 'goal-board-config-title', text: t('panel.goalBoardCommon') });
         this.renderPlaceholderRow(config, t('panel.goalBoardDailyEstimate'));
         this.renderPlaceholderRow(config, t('panel.goalBoardForm'));
@@ -159,7 +169,78 @@ export class GoalBoardPanel extends FloatingPanel {
             }
             this.rootSelectEl.value = this.rootTaskId ?? '';
         }
+        this.renderGoalList();
         this.renderQuarter();
+    }
+
+    /** 左侧阶段目标列表：该任务全部周的目标，点击定位周格，可删除 */
+    private renderGoalList(): void {
+        if (!this.goalListEl) return;
+        this.goalListEl.empty();
+        const task = this.rootTaskId
+            ? this.panelOptions.getTasks().find((item) => item.id === this.rootTaskId)
+            : undefined;
+        const entries = task ? getSection(task, 'stageGoals')?.payload.entries ?? {} : {};
+        const items: Array<{ weekKey: string; id: string; text: string; done: boolean }> = [];
+        for (const [weekKey, goals] of Object.entries(entries)) {
+            for (const goal of goals) {
+                items.push({ weekKey, id: goal.id, text: goal.text, done: goal.done === true });
+            }
+        }
+        items.sort((a, b) => this.weekTime(a.weekKey) - this.weekTime(b.weekKey));
+        if (items.length === 0) {
+            this.goalListEl.createDiv({ cls: 'goal-board-goal-empty', text: t('panel.sectionStageGoalsEmpty') });
+            return;
+        }
+        for (const item of items) {
+            const row = this.goalListEl.createDiv({ cls: 'goal-board-goal-item' });
+            row.toggleClass('is-done', item.done);
+            row.addEventListener('click', () => this.locateWeek(item.weekKey));
+            row.createSpan({ cls: 'goal-board-goal-text', text: item.text });
+            row.createSpan({ cls: 'goal-board-goal-week', text: this.shortWeekLabel(item.weekKey) });
+            const delBtn = row.createEl('button', {
+                cls: 'goal-board-goal-delete',
+                text: '×',
+                attr: { type: 'button', 'aria-label': t('common.delete') },
+            });
+            delBtn.addEventListener('click', (evt) => {
+                evt.stopPropagation();
+                if (!task) return;
+                setStageGoalEntries(
+                    task,
+                    item.weekKey,
+                    getStageGoalEntries(task, item.weekKey).filter((goal) => goal.id !== item.id),
+                );
+                void this.panelOptions.save();
+                this.renderGoalList();
+                this.renderQuarter();
+            });
+        }
+    }
+
+    /** 周键的短标签（如 W45） */
+    private shortWeekLabel(weekKey: string): string {
+        const matched = weekKey.match(/^(\d{4})-W(\d{2})$/);
+        return matched ? `W${matched[2]}` : weekKey;
+    }
+
+    /** 定位到某周：必要时切换季度，滚动到周格并短暂高亮 */
+    private locateWeek(weekKey: string): void {
+        const mondayKey = makeDayKeyFromWeek(weekKey, 1);
+        const year = Number(mondayKey.slice(0, 4));
+        const quarter = this.getQuarterOfMonth(Number(mondayKey.slice(5, 7)));
+        if (year !== this.year || quarter !== this.quarter) {
+            this.year = year;
+            this.quarter = quarter;
+            this.renderQuarter();
+        }
+        const cell = this.weekCellMap.get(weekKey);
+        if (!cell) return;
+        const cellRect = cell.getBoundingClientRect();
+        const laneRect = this.laneEl.getBoundingClientRect();
+        this.laneEl.scrollTop += cellRect.top - laneRect.top - laneRect.height / 2 + cellRect.height / 2;
+        cell.addClass('is-located');
+        window.setTimeout(() => cell.removeClass('is-located'), 1600);
     }
 
     /** 重绘季度导航、周表头与泳道 */
@@ -223,6 +304,7 @@ export class GoalBoardPanel extends FloatingPanel {
     /** 泳道行：仅根任务一行，绘制整周排布区间色块 */
     private renderLanes(): void {
         this.laneEl.empty();
+        this.weekCellMap.clear();
         const task = this.rootTaskId
             ? this.panelOptions.getTasks().find((item) => item.id === this.rootTaskId)
             : undefined;
@@ -243,39 +325,34 @@ export class GoalBoardPanel extends FloatingPanel {
         }
 
         const range = this.buildBarRange(task);
-        if (!range) {
-            this.renderDurationSection(task);
-            return;
+        if (range) {
+            const color = this.panelOptions.getCategories().find((category) => category.id === task.categoryId)?.color
+                ?? '#888888';
+            const barEl = row.createDiv({ cls: 'plan-annual-bar' });
+            barEl.style.left = `${(range.startIndex / this.quarterWeeks.length) * 100}%`;
+            barEl.style.width = `${((range.endIndex - range.startIndex + 1) / this.quarterWeeks.length) * 100}%`;
+            barEl.style.setProperty('--plan-bar-color', color);
+            const status = task.status ?? 'notStarted';
+            barEl.toggleClass('is-in-progress', status === 'inProgress');
+            barEl.toggleClass('is-done', status === 'done');
+            barEl.toggleClass('is-paused', status === 'paused');
+            barEl.toggleClass('is-not-started', status === 'notStarted');
         }
-        const color = this.panelOptions.getCategories().find((category) => category.id === task.categoryId)?.color
-            ?? '#888888';
-        const barEl = row.createDiv({ cls: 'plan-annual-bar' });
-        barEl.style.left = `${(range.startIndex / this.quarterWeeks.length) * 100}%`;
-        barEl.style.width = `${((range.endIndex - range.startIndex + 1) / this.quarterWeeks.length) * 100}%`;
-        barEl.style.setProperty('--plan-bar-color', color);
-        const status = task.status ?? 'notStarted';
-        barEl.toggleClass('is-in-progress', status === 'inProgress');
-        barEl.toggleClass('is-done', status === 'done');
-        barEl.toggleClass('is-paused', status === 'paused');
-        barEl.toggleClass('is-not-started', status === 'notStarted');
 
-        // 进度条按周拆格：点击格子可填写该周阶段目标；已有目标时显示圆点 + 数量
-        const barWeeks = this.quarterWeeks.slice(range.startIndex, range.endIndex + 1);
-        const weekSpan = barWeeks.length;
-        for (let offset = 0; offset < weekSpan; offset++) {
-            const weekKey = barWeeks[offset].weekKey;
-            const cell = barEl.createDiv({ cls: 'plan-annual-bar-cell' });
-            cell.style.left = `${(offset / weekSpan) * 100}%`;
-            cell.style.width = `${(1 / weekSpan) * 100}%`;
-            if (getWeekNote(task, weekKey).trim()) {
-                cell.addClass('has-week-goal');
-                cell.createSpan({ cls: 'plan-annual-bar-weekgoal-mark' });
+        // 周格点击热区：覆盖整行高度、按周列等分，点击任意周列填写该周阶段目标
+        const hitLayer = row.createDiv({ cls: 'plan-annual-week-hit-layer' });
+        for (const item of this.quarterWeeks) {
+            const hit = hitLayer.createDiv({ cls: 'plan-annual-week-hit' });
+            hit.addClass('is-clickable');
+            this.weekCellMap.set(item.weekKey, hit);
+            if (getWeekNote(task, item.weekKey).trim()) {
+                hit.addClass('has-week-goal');
+                hit.createSpan({ cls: 'plan-annual-bar-weekgoal-mark' });
             }
-            this.updateCellMark(cell, task, weekKey);
-            cell.addClass('is-clickable');
-            cell.addEventListener('click', (evt) => {
+            this.updateCellMark(hit, task, item.weekKey);
+            hit.addEventListener('click', (evt) => {
                 evt.stopPropagation();
-                this.openGoalTip(weekKey, cell, task);
+                this.openGoalTip(item.weekKey, hit, task);
             });
         }
 
@@ -323,16 +400,21 @@ export class GoalBoardPanel extends FloatingPanel {
         return result;
     }
 
-    /** 刷新格子上的阶段目标标识（圆点 + 未完成数量） */
+    /** 刷新周格上的阶段目标：每条一行，显示 target 图标 + 目标名称 */
     private updateCellMark(cell: HTMLElement, task: PrototypeTask, weekKey: string): void {
-        cell.querySelector('.goal-board-weekgoals-mark')?.remove();
+        cell.querySelector('.goal-board-weekgoal-list')?.remove();
         cell.removeClass('has-week-goals');
-        const count = getStageGoalEntries(task, weekKey).filter((item) => !item.done).length;
-        if (count === 0) return;
+        const goals = getStageGoalEntries(task, weekKey);
+        if (goals.length === 0) return;
         cell.addClass('has-week-goals');
-        const mark = cell.createSpan({ cls: 'goal-board-weekgoals-mark' });
-        mark.createSpan({ cls: 'goal-board-weekgoals-dot' });
-        mark.createSpan({ cls: 'goal-board-weekgoals-count', text: String(count) });
+        const list = cell.createDiv({ cls: 'goal-board-weekgoal-list' });
+        for (const goal of goals) {
+            const item = list.createDiv({ cls: 'goal-board-weekgoal-item' });
+            item.toggleClass('is-done', goal.done === true);
+            item.setAttribute('title', goal.text);
+            setIcon(item.createSpan({ cls: 'goal-board-weekgoal-icon' }), 'target');
+            item.createSpan({ cls: 'goal-board-weekgoal-name', text: goal.text });
+        }
     }
 
     /** 打开某周的阶段目标悬浮面板（再次点击同一格子则关闭） */
@@ -453,10 +535,11 @@ export class GoalBoardPanel extends FloatingPanel {
         });
     }
 
-    /** 目标变更后：重建悬浮面板内容并刷新格子标识 */
+    /** 目标变更后：重建悬浮面板内容、刷新格子标识与左侧列表 */
     private afterGoalChange(task: PrototypeTask, weekKey: string): void {
         this.renderGoalTipContent(task);
         if (this.goalTipAnchorEl) this.updateCellMark(this.goalTipAnchorEl, task, weekKey);
+        this.renderGoalList();
         // 重建内容后焦点回到输入框，便于连续添加
         this.goalTipEl?.querySelector<HTMLInputElement>('.goal-board-goal-tip-input')?.focus();
     }

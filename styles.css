@@ -13025,7 +13025,7 @@ button.task-record-dropdown-item.is-selected {
 
 .plan-annual-lane-row {
     position: relative;
-    height: 26px;
+    min-height: 26px;
     box-sizing: border-box;
     border-bottom: 1px solid var(--sdt-card-border, var(--background-modifier-border));
 }
@@ -14630,35 +14630,78 @@ button.interface-today-tasks-add {
     overflow-y: auto;
 }
 /* ======================== 周目标：格子标识 / 悬浮面板 / 板块内容 ======================== */
-.plan-annual-bar-cell.is-clickable {
+/* 周格点击热区：覆盖整行高度，按周列等分（每列都可点击填写阶段目标） */
+/* 周格点击热区：每列都可点击填写阶段目标；高度随该周目标数量增长 */
+.plan-annual-week-hit-layer {
+    position: relative;
+    display: flex;
+    min-height: 26px;
+    pointer-events: none;
+}
+
+.plan-annual-week-hit {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 2px 3px;
+    pointer-events: none;
+}
+
+.plan-annual-week-hit.is-clickable {
+    pointer-events: auto;
     cursor: pointer;
 }
 
-.plan-annual-bar-cell.is-clickable:hover {
-    background: rgba(255, 255, 255, 0.14);
+.plan-annual-week-hit.is-clickable:hover {
+    background: rgba(255, 255, 255, 0.12);
 }
 
-.goal-board-weekgoals-mark {
-    position: absolute;
-    right: 2px;
-    bottom: 1px;
-    display: inline-flex;
+/* 周格上的阶段目标：每条一行，target 图标 + 名称 */
+.goal-board-weekgoal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    pointer-events: none;
+}
+
+.goal-board-weekgoal-item {
+    display: flex;
     align-items: center;
     gap: 2px;
+    min-width: 0;
     padding: 0 2px;
-    border-radius: 6px;
+    border-radius: 3px;
     background: rgba(0, 0, 0, 0.45);
     color: #ffffff;
     font-size: 9px;
     line-height: 12px;
-    pointer-events: none;
 }
 
-.goal-board-weekgoals-dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--interactive-accent);
+.goal-board-weekgoal-item.is-done {
+    opacity: 0.6;
+}
+
+.goal-board-weekgoal-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.goal-board-weekgoal-icon svg {
+    width: 10px;
+    height: 10px;
+}
+
+.goal-board-weekgoal-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .goal-board-panel {
@@ -14797,6 +14840,75 @@ button.interface-today-tasks-add {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 左侧阶段目标列表 */
+.goal-board-goal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.goal-board-goal-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.goal-board-goal-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.goal-board-goal-item.is-done .goal-board-goal-text {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.goal-board-goal-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.goal-board-goal-week {
+    flex: 0 0 auto;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.goal-board-goal-delete {
+    flex: 0 0 auto;
+    padding: 0 2px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.goal-board-goal-delete:hover {
+    color: var(--text-error);
+}
+
+.goal-board-goal-empty {
+    padding: 2px 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* 左侧列表点击定位后的周格高亮 */
+.plan-annual-week-hit.is-located {
+    box-shadow: inset 0 0 0 2px var(--interactive-accent);
 }
 
 .task-section-weekgoals {
