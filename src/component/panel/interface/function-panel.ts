@@ -75,20 +75,20 @@ export class FunctionPanel extends FloatingPanel {
                 ],
             },
             {
-                id: 'section',
-                label: t('interface.functionGroupSection'),
-                items: [
-                    { id: 'habit', label: t('interface.habit'), icon: 'repeat' },
-                    { id: 'goalBoard', label: t('panel.planAnnualGoal'), icon: 'target' },
-                ],
-            },
-            {
                 id: 'plan',
                 label: t('interface.functionGroupPlan'),
                 items: [
                     { id: 'planAnnual', label: t('interface.planAnnual'), icon: 'calendar-range' },
                     { id: 'planWeek', label: t('interface.planWeek'), icon: 'calendar-check' },
                     { id: 'timeBox', label: t('interface.timeBox'), icon: 'calendar-clock' },
+                ],
+            },
+            {
+                id: 'section',
+                label: t('interface.functionGroupSection'),
+                items: [
+                    { id: 'habit', label: t('interface.habit'), icon: 'repeat' },
+                    { id: 'goalBoard', label: t('panel.planAnnualGoal'), icon: 'target' },
                 ],
             },
             {

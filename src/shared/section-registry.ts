@@ -21,8 +21,19 @@ export interface SectionDefinition {
     parsePayload: (raw: unknown) => unknown | null;
 }
 
+/**
+ * 兼容两种传入形态：新结构把载荷整体存进板块（如 { items } / { entries } / { notes }），
+ * 旧字段迁移传入的是内层值本身。存在包装键时取内层值，避免解析时把整块数据丢掉。
+ */
+function unwrapPayload(raw: unknown, key: 'items' | 'entries' | 'notes'): unknown {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const record = raw as Record<string, unknown>;
+    return key in record ? record[key] : raw;
+}
+
 /** 解析任务清单条目 */
 function parseChecklistPayload(raw: unknown): TaskSectionPayloadMap['checklist'] | null {
+    raw = unwrapPayload(raw, 'items');
     if (!Array.isArray(raw)) return null;
     const items: ChecklistItem[] = [];
     for (const entry of raw) {
@@ -43,6 +54,7 @@ function parseChecklistPayload(raw: unknown): TaskSectionPayloadMap['checklist']
 
 /** 解析日目标（键为日期 YYYY-MM-DD） */
 function parseDayGoalsPayload(raw: unknown): TaskSectionPayloadMap['dayGoals'] | null {
+    raw = unwrapPayload(raw, 'entries');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const entries: Record<string, TaskDayGoalEntry[]> = {};
     for (const [dayKey, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -66,6 +78,7 @@ function parseDayGoalsPayload(raw: unknown): TaskSectionPayloadMap['dayGoals'] |
 
 /** 解析本周描述（键为周键 YYYY-Www） */
 function parseWeekNotePayload(raw: unknown): TaskSectionPayloadMap['weekNote'] | null {
+    raw = unwrapPayload(raw, 'notes');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const notes: Record<string, string> = {};
     for (const [weekKey, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -78,6 +91,7 @@ function parseWeekNotePayload(raw: unknown): TaskSectionPayloadMap['weekNote'] |
 
 /** 解析阶段目标（键为周键 YYYY-Www，该周为截止时间点） */
 function parseStageGoalsPayload(raw: unknown): TaskSectionPayloadMap['stageGoals'] | null {
+    raw = unwrapPayload(raw, 'entries');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const entries: Record<string, TaskStageGoalEntry[]> = {};
     for (const [weekKey, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -101,6 +115,7 @@ function parseStageGoalsPayload(raw: unknown): TaskSectionPayloadMap['stageGoals
 
 /** 解析目标清单 */
 function parseGoalsPayload(raw: unknown): TaskSectionPayloadMap['goals'] | null {
+    raw = unwrapPayload(raw, 'items');
     if (!Array.isArray(raw)) return null;
     const items: TaskGoalEntry[] = [];
     for (const entry of raw) {

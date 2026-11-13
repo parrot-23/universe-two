@@ -11142,7 +11142,7 @@ button.task-detail-todo-tool-btn:disabled {
 }
 
 .task-detail-desc {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -11151,9 +11151,15 @@ button.task-detail-todo-tool-btn:disabled {
     color: var(--sdt-text-secondary, var(--text-muted));
 }
 
+/* 描述进入编辑态时撑满整行，避免输入框被文字宽度限制 */
+.task-detail-desc.is-editing {
+    flex: 1 1 auto;
+}
+
 .task-detail-inline-input {
     width: 100%;
     min-width: 0;
+    height: 28px;
     box-sizing: border-box;
     padding: 2px 6px;
     font-size: 13px;

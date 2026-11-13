@@ -21,6 +21,7 @@ import type { TimeBoxData } from '../datatypes/timebox-data';
 import type { ThemeData, Theme } from '../datatypes/theme';
 import { DEFAULT_THEME_ID } from '../datatypes/theme';
 import { createSectionsFromLegacy, parseSectionDisplay, parseTaskSections } from '../shared/task-sections';
+import { log } from '../shared/logger';
 import { t } from '../i18n';
 
 /** 缓存目录默认名称 */
@@ -331,12 +332,31 @@ export class BaseRepo {
 
         // 转换后立即落盘，避免下次启动重复执行
         if (prototypeTaskMetaMigrated || savedTaskSectionSchemaVersion < 1) await this.saveAll();
+
+        // 持久化自检：记录加载到的板块条目数，便于排查重启后数据丢失
+        log('持久化自检', countSectionStats(initialPrototypeTasks));
     }
 
     /** 清空全部插件数据并重置为默认值 */
     async clearAll(): Promise<void> {
         await this.plugin.saveData({});
     }
+}
+
+/** 统计板块条目数（排查板块内容持久化问题用） */
+function countSectionStats(tasks: PrototypeTask[]): { tasks: number; stageGoals: number; checklist: number } {
+    let stageGoals = 0;
+    let checklist = 0;
+    for (const task of tasks) {
+        for (const section of task.sections ?? []) {
+            if (section.type === 'stageGoals') {
+                for (const list of Object.values(section.payload.entries)) stageGoals += list.length;
+            } else if (section.type === 'checklist') {
+                checklist += section.payload.items.length;
+            }
+        }
+    }
+    return { tasks: tasks.length, stageGoals, checklist };
 }
 
 /** 解析持久化的原型任务（兼容旧数据 / 非法数据：返回空数组） */
